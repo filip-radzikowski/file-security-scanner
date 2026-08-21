@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="850" viewBox="0 0 1600 850">
+<defs>
+  <marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+    <path d="M0 0 L10 5 L0 10 Z" fill="#333"/>
+  </marker>
+</defs>
+<rect width="1600" height="850" fill="white"/>
+
+<text x="800" y="55" text-anchor="middle" font-family="Arial" font-size="28" font-weight="bold" fill="#222">
+File Security Scanner — V1
+</text>
+
+<!-- main flow -->
+<rect x="80" y="150" width="220" height="120" fill="white" stroke="#333" stroke-width="2"/>
+<text x="190" y="195" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">User / CLI</text>
+<text x="190" y="225" text-anchor="middle" font-family="Arial" font-size="14" fill="#555">Select file / folder</text>
+
+<rect x="380" y="150" width="250" height="120" fill="white" stroke="#333" stroke-width="2"/>
+<text x="505" y="195" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">Scanner</text>
+<text x="505" y="225" text-anchor="middle" font-family="Arial" font-size="14" fill="#555">Metadata + SHA-256</text>
+
+<rect x="710" y="150" width="250" height="120" fill="white" stroke="#333" stroke-width="2"/>
+<text x="835" y="195" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">Analysis</text>
+<text x="835" y="225" text-anchor="middle" font-family="Arial" font-size="14" fill="#555">Basic suspicious-file rules</text>
+
+<rect x="1040" y="150" width="250" height="120" fill="white" stroke="#333" stroke-width="2"/>
+<text x="1165" y="195" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">Risk Engine</text>
+<text x="1165" y="225" text-anchor="middle" font-family="Arial" font-size="14" fill="#555">Low / Medium / High</text>
+
+<rect x="1370" y="150" width="150" height="120" fill="white" stroke="#333" stroke-width="2"/>
+<text x="1445" y="195" text-anchor="middle" font-family="Arial" font-size="19" font-weight="bold">Decision</text>
+<text x="1445" y="225" text-anchor="middle" font-family="Arial" font-size="14" fill="#555">Allow / Flag</text>
+
+<!-- arrows -->
+<g stroke="#333" stroke-width="2" fill="none" marker-end="url(#a)">
+<path d="M300 210 H380"/>
+<path d="M630 210 H710"/>
+<path d="M960 210 H1040"/>
+<path d="M1290 210 H1370"/>
+</g>
+
+<!-- logging/output -->
+<rect x="420" y="420" width="300" height="120" fill="white" stroke="#333" stroke-width="2"/>
+<text x="570" y="465" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">Audit Logger</text>
+<text x="570" y="495" text-anchor="middle" font-family="Arial" font-size="14" fill="#555">Hash • Findings • Decision</text>
+
+<rect x="880" y="420" width="300" height="120" fill="white" stroke="#333" stroke-width="2"/>
+<text x="1030" y="465" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">Scan Report</text>
+<text x="1030" y="495" text-anchor="middle" font-family="Arial" font-size="14" fill="#555">Result • Risk • Timestamp</text>
+
+<g stroke="#333" stroke-width="2" fill="none" marker-end="url(#a)">
+<path d="M1445 270 V350 H570 V420"/>
+<path d="M720 480 H880"/>
+</g>
+
+<!-- scope -->
+<rect x="300" y="650" width="1000" height="85" fill="white" stroke="#777" stroke-width="1.5" stroke-dasharray="7 6"/>
+<text x="800" y="683" text-anchor="middle" font-family="Arial" font-size="17" font-weight="bold" fill="#333">Future versions</text>
+<text x="800" y="710" text-anchor="middle" font-family="Arial" font-size="14" fill="#555">
+Quarantine • YARA • Threat intelligence • Dashboard
+</text>
+</svg>
