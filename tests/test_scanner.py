@@ -1,8 +1,9 @@
 from src.scanner import scan_file
 
-result = scan_file("tests/test_file.txt")
+scan = scan_file("tests/test_file.txt")
 
-print(f"File: {result['path']}")
-print(f"SHA-256: {result['sha256']}")
-print(f"Findings: {result['findings']}")
-print(f"Risk: {result['risk']}")
+print("RESULT:")
+print(scan["result"])
+
+print("\nAUDIT LOG:")
+print(scan["log"])
