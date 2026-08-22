@@ -1,9 +1,7 @@
 from src.scanner import scan_file
+from src.report import generate_report
 
-scan = scan_file("tests/test_file.txt")
 
-print("RESULT:")
-print(scan["result"])
+result = scan_file("tests/fixtures/test_file.txt")
 
-print("\nAUDIT LOG:")
-print(scan["log"])
+print(generate_report(result["result"]))
