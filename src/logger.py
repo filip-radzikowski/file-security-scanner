@@ -12,12 +12,13 @@ def log_scan(result):
     timestamp = datetime.now().isoformat()
 
     log_entry = {
-        "timestamp": timestamp,
-        "file": result["path"],
-        "sha256": result["sha256"],
-        "findings": result["findings"],
-        "risk": result["risk"]
-    }
+    "timestamp": timestamp,
+    "file": result["path"],
+    "sha256": result["sha256"],
+    "findings": result["findings"],
+    "risk": result["risk"],
+    "risk_score": result["risk_score"]
+}
 
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 

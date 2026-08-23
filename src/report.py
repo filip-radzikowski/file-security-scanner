@@ -17,6 +17,7 @@ def generate_report(result):
         f"SHA-256:  {result['sha256']}",
         "",
         f"Risk:     {result['risk']}",
+        f"Score:    {result['risk_score']}/100",
         "",
         "Findings:"
     ]

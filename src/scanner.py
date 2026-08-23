@@ -19,8 +19,9 @@ def scan_file(file_path):
         "path": str(path),
         "sha256": file_hash,
         "findings": findings,
-        "risk": risk
-    }
+        "risk": risk["level"],
+        "risk_score": risk["score"]
+        }
 
     log_entry = log_scan(result)
 

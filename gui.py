@@ -4,7 +4,6 @@ from tkinter import filedialog
 from src.scanner import scan_file
 
 
-
 def main():
     window = tk.Tk()
     window.title("File Security Scanner")
@@ -57,14 +56,26 @@ def main():
         padx=15,
         pady=15
     )
-    results_frame.pack(fill="both", expand=True, padx=30, pady=15)
+    results_frame.pack(
+        fill="both",
+        expand=True,
+        padx=30,
+        pady=15
+    )
 
     risk_label = tk.Label(
         results_frame,
         text="Risk: --",
         font=("Arial", 16, "bold")
     )
-    risk_label.pack(anchor="w", pady=(0, 15))
+    risk_label.pack(anchor="w", pady=(0, 5))
+
+    score_label = tk.Label(
+        results_frame,
+        text="Score: --",
+        font=("Arial", 12, "bold")
+    )
+    score_label.pack(anchor="w", pady=(0, 15))
 
     file_label = tk.Label(
         results_frame,
@@ -127,6 +138,8 @@ def main():
                 fg="black"
             )
 
+            score_label.config(text="Score: --")
+
             file_label.config(text="File: --")
             hash_label.config(text="SHA-256: --")
             findings_label.config(text="Ready to scan.")
@@ -137,7 +150,9 @@ def main():
         file_path = selected_path.get()
 
         if not file_path:
-            findings_label.config(text="Please select a file first.")
+            findings_label.config(
+                text="Please select a file first."
+            )
             return
 
         try:
@@ -145,9 +160,16 @@ def main():
             result = scan["result"]
 
             risk = result["risk"]
+            risk_score = result["risk_score"]
             findings = result["findings"]
 
-            risk_label.config(text=f"Risk: {risk}")
+            risk_label.config(
+                text=f"Risk: {risk}"
+            )
+
+            score_label.config(
+                text=f"Score: {risk_score}/100"
+            )
 
             if risk == "LOW":
                 risk_label.config(fg="green")
@@ -171,7 +193,9 @@ def main():
             else:
                 findings_text = "• No suspicious findings"
 
-            findings_label.config(text=findings_text)
+            findings_label.config(
+                text=findings_text
+            )
 
             if risk == "LOW":
                 decision = "ALLOWED"
