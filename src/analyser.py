@@ -1,4 +1,5 @@
 from pathlib import Path
+import ctypes
 
 
 SUSPICIOUS_EXTENSIONS = {
@@ -21,6 +22,21 @@ FILE_SIGNATURES = {
     ".zip": b"PK\x03\x04",
     ".exe": b"MZ",
 }
+
+
+def is_hidden_file(path):
+    """Return True if a file has the Windows Hidden attribute."""
+
+    try:
+        attributes = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+
+        if attributes == -1:
+            return False
+
+        return bool(attributes & 0x2)
+
+    except AttributeError:
+        return False
 
 
 def analyze_file(file_path):
@@ -59,8 +75,6 @@ def analyze_file(file_path):
                     len(expected_signature)
                 )
 
-            # Only flag a mismatch when the content matches
-            # a different known file type.
             detected_extension = None
 
             for extension, signature in FILE_SIGNATURES.items():
@@ -78,5 +92,11 @@ def analyze_file(file_path):
 
         except OSError:
             pass
+
+    # V2: Hidden file detection
+    if is_hidden_file(path):
+        findings.append(
+            "Hidden file detected"
+        )
 
     return findings

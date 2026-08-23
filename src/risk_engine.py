@@ -9,6 +9,7 @@ FINDING_WEIGHTS = {
     "suspicious file extension": 30,
     "double extension": 25,
     "extension/content mismatch": 40,
+    "hidden file detected": 10,
 }
 
 
