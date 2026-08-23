@@ -2,7 +2,8 @@ from datetime import datetime
 from pathlib import Path
 
 
-LOG_FILE = Path("logs/scan.log")
+APP_DATA = Path.home() / "AppData" / "Local" / "FileSecurityScanner"
+LOG_FILE = APP_DATA / "logs" / "scan.log"
 
 
 def log_scan(result):
@@ -18,7 +19,7 @@ def log_scan(result):
         "risk": result["risk"]
     }
 
-    LOG_FILE.parent.mkdir(exist_ok=True)
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     with LOG_FILE.open("a", encoding="utf-8") as log:
         log.write(f"{log_entry}\n")

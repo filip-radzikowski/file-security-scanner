@@ -4,6 +4,7 @@ from tkinter import filedialog
 from src.scanner import scan_file
 
 
+
 def main():
     window = tk.Tk()
     window.title("File Security Scanner")
@@ -121,7 +122,11 @@ def main():
             selected_path.set(file_path)
             selected_file.config(text=file_path)
 
-            risk_label.config(text="Risk: --")
+            risk_label.config(
+                text="Risk: --",
+                fg="black"
+            )
+
             file_label.config(text="File: --")
             hash_label.config(text="SHA-256: --")
             findings_label.config(text="Ready to scan.")
@@ -181,8 +186,10 @@ def main():
                 text=f"Timestamp: {scan['log']['timestamp']}"
             )
 
-        except FileNotFoundError:
-            findings_label.config(text="Error: File not found.")
+        except FileNotFoundError as error:
+            findings_label.config(
+                text=f"Error: {error}"
+            )
 
     # Buttons
     button_frame = tk.Frame(window)
