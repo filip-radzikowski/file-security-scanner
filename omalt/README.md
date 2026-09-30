@@ -63,6 +63,19 @@ src/
 
 Create `src/modules/<type>/` with `<Type>Card.tsx`, `<Type>Dashboard.tsx`, `schema.ts` and `index.ts` exporting a `ModuleDefinition`, then register it in `registry.ts` and `meta.ts`. Swap `aiService` in `src/ai/index.ts` to change how suggestions are produced.
 
+## Unlocks (time left until something opens)
+
+Some modules start **locked**. After your first entry, faded dashed cards appear on the canvas with a progress bar and a countdown, e.g. **Streak** ("2 more days") and **Reflect** ("5d 3h left"). Tap one to see what it is, how to unlock it, and the exact time it opens. When the condition is met it becomes a real module and a banner under the text box offers to open it.
+
+Unlocks are data in `src/unlocks/rules.ts`. Each rule names a module type and one of two metric kinds, which cover most ideas:
+
+- `elapsed`: real time since the first entry, shown as an exact countdown.
+- `stat`: a count derived from the user's activity (`entryCount`, `activeDays`, `tasksDone`) with a target, shown as "N more days".
+
+To add one: add a rule, then add a module folder for its type and register it. Locked modules are stored in the `modules` table with `status = 'locked'`, so they get the same spiral placement, trail and saved position as any other card. Progress is re-checked on every entry, every minute, and when the app returns to the foreground.
+
+To preview time-based unlocks, **Settings > Preview unlocks > Skip ahead 1 day** moves the app's clock forward (entries you write afterwards are dated to match). Settings also shows the build id, which is handy for confirming you are running the latest code.
+
 ## Design notes
 
 - **World**: 6000 x 6000 pt, centred on the text box (3000, 3000). Card `x`/`y` are world-space card centres stored in the `modules` table.

@@ -84,6 +84,11 @@ export async function updateModulePosition(id: string, x: number, y: number): Pr
   await db.runAsync('UPDATE modules SET x = ?, y = ? WHERE id = ?', [x, y, id]);
 }
 
+export async function setModuleStatus(id: string, status: ModuleRecord['status']): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('UPDATE modules SET status = ? WHERE id = ?', [status, id]);
+}
+
 export async function touchModule(id: string, at: number): Promise<void> {
   const db = await getDb();
   await db.runAsync('UPDATE modules SET lastUsedAt = ? WHERE id = ?', [at, id]);

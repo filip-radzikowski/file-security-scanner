@@ -62,7 +62,7 @@ export const extractedItemRowSchema = z.object({
 });
 export type ExtractedItemRow = z.infer<typeof extractedItemRowSchema>;
 
-export const moduleStatusSchema = z.enum(['active', 'resting']);
+export const moduleStatusSchema = z.enum(['active', 'resting', 'locked']);
 
 export const moduleRowSchema = z.object({
   id: z.string(),

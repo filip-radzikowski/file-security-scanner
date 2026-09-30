@@ -8,6 +8,8 @@ import * as repo from '../db/repo';
 import type { Entry, ExtractedItemRow, ModuleRecord, Suggestion } from '../db/schema';
 import { makeId } from '../lib/ids';
 import { titleForType } from '../modules/meta';
+import { computeProgress, computeStats } from '../unlocks/progress';
+import { UNLOCK_RULES } from '../unlocks/rules';
 import { MOOD_ITEM_TYPE, MOOD_LEVELS, MoodPoint, deriveMoods, moodPayloadSchema } from '../modules/mood/schema';
 import {
   TASK_ITEM_TYPE,
@@ -20,6 +22,8 @@ import { reconcileSuggestions } from './suggestions';
 
 const KV_LIST_VIEW = 'settings.listView';
 const KV_PAN_CENTER = 'canvas.panCenter';
+const KV_CLOCK_OFFSET = 'debug.clockOffsetMs';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const entryTextSchema = z.string().trim().min(1).max(4000);
 const taskTextSchema = z.string().trim().min(1).max(200);
@@ -33,6 +37,11 @@ export interface PanCenter {
 export interface AddEntryResult {
   taskCount: number;
   mood: number | null;
+}
+
+export interface UnlockNotice {
+  moduleId: string;
+  title: string;
 }
 
 interface OmaltState {
@@ -49,6 +58,9 @@ interface OmaltState {
   listView: boolean;
   /** World point that sits at the centre of the viewport. */
   panCenter: PanCenter;
+  /** Testing only: shifts "now" forward so time-based unlocks can be previewed. */
+  clockOffsetMs: number;
+  unlockNotice: UnlockNotice | null;
 
   init(): Promise<void>;
   addEntry(text: string): Promise<AddEntryResult | null>;
@@ -60,6 +72,10 @@ interface OmaltState {
   markModuleUsed(id: string): Promise<void>;
   setListView(value: boolean): Promise<void>;
   savePanCenter(x: number, y: number): void;
+  syncUnlocks(): Promise<void>;
+  dismissUnlockNotice(): void;
+  skipAhead(days: number): Promise<void>;
+  resetClock(): Promise<void>;
   resetAll(): Promise<void>;
 }
 
@@ -95,6 +111,66 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     });
   }
 
+  const nowMs = () => Date.now() + get().clockOffsetMs;
+
+  /**
+   * Adds a locked teaser for every unlock rule once the user has written something,
+   * and flips teasers to active when their condition is met. Serialised so overlapping
+   * triggers (a new entry and the timer) can't create duplicates.
+   */
+  async function runUnlockSync(): Promise<void> {
+    const { entries, tasks, modules } = get();
+    if (entries.length === 0) return;
+    const stats = computeStats(entries, tasks);
+    const now = nowMs();
+    const known = [...modules];
+    const created: ModuleRecord[] = [];
+    const activated: ModuleRecord[] = [];
+
+    for (const rule of UNLOCK_RULES) {
+      let m = known.find((x) => x.type === rule.moduleType);
+      if (!m) {
+        const spot = findSpawnPosition(known.map((k) => ({ x: k.x, y: k.y })));
+        m = {
+          id: makeId('mod'),
+          type: rule.moduleType,
+          title: rule.title,
+          x: spot.x,
+          y: spot.y,
+          addedAt: now,
+          lastUsedAt: now,
+          status: 'locked',
+        };
+        await repo.insertModule(m);
+        known.push(m);
+        created.push(m);
+      }
+      if (m.status === 'locked' && computeProgress(rule, stats, now).unlocked) {
+        await repo.setModuleStatus(m.id, 'active');
+        const unlocked: ModuleRecord = { ...m, status: 'active', lastUsedAt: now };
+        known[known.indexOf(m)] = unlocked;
+        activated.push(unlocked);
+      }
+    }
+    if (created.length === 0 && activated.length === 0) return;
+
+    set((s) => {
+      const byId = new Map(s.modules.map((x) => [x.id, x]));
+      for (const c of created) if (!byId.has(c.id)) byId.set(c.id, c);
+      for (const a of activated) byId.set(a.id, { ...(byId.get(a.id) ?? a), status: 'active' });
+      const last = activated[activated.length - 1];
+      return {
+        modules: [...byId.values()],
+        unlockNotice: last ? { moduleId: last.id, title: last.title } : s.unlockNotice,
+      };
+    });
+  }
+  let unlockQueue: Promise<void> = Promise.resolve();
+  const enqueueUnlockSync = () => {
+    unlockQueue = unlockQueue.then(runUnlockSync).catch(() => {});
+    return unlockQueue;
+  };
+
   return {
     ready: false,
     error: null,
@@ -106,16 +182,19 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     moods: [],
     listView: false,
     panCenter: DEFAULT_PAN,
+    clockOffsetMs: 0,
+    unlockNotice: null,
 
     async init() {
       try {
-        const [entries, items, modules, suggestions, listViewRaw, panRaw] = await Promise.all([
+        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw] = await Promise.all([
           repo.listEntries(),
           repo.listExtractedItems(),
           repo.listModules(),
           repo.listSuggestions(),
           repo.getKv(KV_LIST_VIEW),
           repo.getKv(KV_PAN_CENTER),
+          repo.getKv(KV_CLOCK_OFFSET),
         ]);
 
         let listView = listViewRaw === '1';
@@ -138,7 +217,19 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
           }
         }
 
-        set({ entries, items, modules, suggestions, ...derive(entries, items), listView, panCenter, ready: true });
+        const offset = Number(offsetRaw);
+        set({
+          entries,
+          items,
+          modules,
+          suggestions,
+          ...derive(entries, items),
+          listView,
+          panCenter,
+          clockOffsetMs: Number.isFinite(offset) ? offset : 0,
+          ready: true,
+        });
+        enqueueUnlockSync();
       } catch (e) {
         set({ error: e instanceof Error ? e.message : 'Could not open the local database.', ready: true });
       }
@@ -153,7 +244,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       const entry: Entry = {
         id: makeId('ent'),
         text,
-        createdAt: Date.now(),
+        createdAt: nowMs(),
         mood: analysis.mood?.score ?? null,
       };
       const newItems: ExtractedItemRow[] = analysis.tasks.map((t) => ({
@@ -182,6 +273,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       const items = [...get().items, ...newItems];
       set({ entries, items, ...derive(entries, items) });
       await refreshSuggestions();
+      await enqueueUnlockSync();
 
       return { taskCount: analysis.tasks.length, mood: analysis.mood?.score ?? null };
     },
@@ -227,7 +319,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       const payload = item ? parseTaskPayload(item.payload) : null;
       if (!item || !payload) return;
       const done = !payload.done;
-      const next = JSON.stringify({ ...payload, done, doneAt: done ? Date.now() : undefined });
+      const next = JSON.stringify({ ...payload, done, doneAt: done ? nowMs() : undefined });
       await repo.updateExtractedItemPayload(id, next);
       const items = get().items.map((i) => (i.id === id ? { ...i, payload: next } : i));
       set({ items, ...derive(get().entries, items) });
@@ -241,7 +333,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         entryId: null,
         type: TASK_ITEM_TYPE,
         payload: JSON.stringify(
-          taskPayloadSchema.parse({ text: parsed.data, done: false, source: 'manual', createdAt: Date.now() }),
+          taskPayloadSchema.parse({ text: parsed.data, done: false, source: 'manual', createdAt: nowMs() }),
         ),
       };
       await repo.insertExtractedItem(item);
@@ -255,7 +347,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       const entry: Entry = {
         id: makeId('ent'),
         text: `Feeling ${level.label.toLowerCase()} today.`,
-        createdAt: Date.now(),
+        createdAt: nowMs(),
         mood: level.score,
       };
       const item: ExtractedItemRow = {
@@ -271,10 +363,11 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       const entries = [...get().entries, entry];
       const items = [...get().items, item];
       set({ entries, items, ...derive(entries, items) });
+      await enqueueUnlockSync();
     },
 
     async markModuleUsed(id) {
-      const at = Date.now();
+      const at = nowMs();
       await repo.touchModule(id, at);
       set((s) => ({ modules: s.modules.map((m) => (m.id === id ? { ...m, lastUsedAt: at } : m)) }));
     },
@@ -289,6 +382,26 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       repo.setKv(KV_PAN_CENTER, JSON.stringify({ x, y })).catch(() => {});
     },
 
+    syncUnlocks() {
+      return enqueueUnlockSync();
+    },
+
+    dismissUnlockNotice() {
+      set({ unlockNotice: null });
+    },
+
+    async skipAhead(days) {
+      const offset = get().clockOffsetMs + days * DAY_MS;
+      set({ clockOffsetMs: offset });
+      await repo.setKv(KV_CLOCK_OFFSET, String(offset));
+      await enqueueUnlockSync();
+    },
+
+    async resetClock() {
+      set({ clockOffsetMs: 0 });
+      await repo.setKv(KV_CLOCK_OFFSET, '0');
+    },
+
     async resetAll() {
       await repo.eraseAll();
       set({
@@ -300,6 +413,8 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         moods: [],
         listView: false,
         panCenter: DEFAULT_PAN,
+        clockOffsetMs: 0,
+        unlockNotice: null,
       });
     },
   };

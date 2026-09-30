@@ -1,6 +1,9 @@
 import { format } from 'date-fns';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
+import { useUnlockProgress } from '../unlocks/useUnlockProgress';
+import type { ModuleData } from '../modules/types';
+import type { ModuleRecord } from '../db/schema';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getModuleDefinition } from '../modules/registry';
@@ -10,6 +13,34 @@ import { AppText } from './AppText';
 import { Composer } from './Composer';
 import { SuggestionPrompt } from './SuggestionPrompt';
 
+function ModuleRow({ module: m, data }: { module: ModuleRecord; data: ModuleData }) {
+  const locked = m.status === 'locked';
+  const unlock = useUnlockProgress(locked ? m.type : '');
+  const def = getModuleDefinition(m.type);
+  const summary = locked ? `Locked \u00B7 ${unlock?.progress.remainingLabel ?? ''}` : def.summarize(data);
+  return (
+    <Pressable
+      onPress={() => router.push({ pathname: '/module/[id]', params: { id: m.id } })}
+      accessibilityRole="button"
+      accessibilityLabel={`${m.title}. ${summary}`}
+      accessibilityHint={locked ? 'Shows what unlocks it' : 'Opens the full dashboard'}
+      style={({ pressed }) => [styles.row, locked && styles.rowLocked, pressed && styles.pillPressed]}
+    >
+      <View style={styles.rowText}>
+        <AppText variant="heading" tone={locked ? 'soft' : 'ink'}>
+          {m.title}
+        </AppText>
+        <AppText variant="small" tone="soft">
+          {summary}
+        </AppText>
+      </View>
+      <AppText variant="heading" tone="soft" allowFontScaling={false}>
+        {'\u203A'}
+      </AppText>
+    </Pressable>
+  );
+}
+
 /** Plain, linear alternative to the canvas (Settings > Plain list view). */
 export function ListView() {
   const insets = useSafeAreaInsets();
@@ -18,7 +49,7 @@ export function ListView() {
   const moods = useOmaltStore((s) => s.moods);
   const entries = useOmaltStore((s) => s.entries);
   const recent = useMemo(() => entries.slice(-5).reverse(), [entries]);
-  const data = useMemo(() => ({ tasks, moods }), [tasks, moods]);
+  const data = useMemo(() => ({ tasks, moods, entries }), [tasks, moods, entries]);
 
   return (
     <ScrollView
@@ -59,30 +90,7 @@ export function ListView() {
           Nothing here yet. Keep writing, and Omalt will suggest what to add.
         </AppText>
       ) : (
-        modules.map((m) => {
-          const def = getModuleDefinition(m.type);
-          const summary = def.summarize(data);
-          return (
-            <Pressable
-              key={m.id}
-              onPress={() => router.push({ pathname: '/module/[id]', params: { id: m.id } })}
-              accessibilityRole="button"
-              accessibilityLabel={`${m.title}. ${summary}`}
-              accessibilityHint="Opens the full dashboard"
-              style={({ pressed }) => [styles.row, pressed && styles.pillPressed]}
-            >
-              <View style={styles.rowText}>
-                <AppText variant="heading">{m.title}</AppText>
-                <AppText variant="small" tone="soft">
-                  {summary} {'·'} added {format(m.addedAt, 'd MMM')}
-                </AppText>
-              </View>
-              <AppText variant="heading" tone="soft" allowFontScaling={false}>
-                {'›'}
-              </AppText>
-            </Pressable>
-          );
-        })
+        modules.map((m) => <ModuleRow key={m.id} module={m} data={data} />)
       )}
 
       {recent.length > 0 ? (
@@ -133,6 +141,7 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     ...shadows.card,
   },
+  rowLocked: { backgroundColor: colors.sandSoft, borderStyle: 'dashed' },
   rowText: { flex: 1 },
   thought: {
     padding: spacing.lg,

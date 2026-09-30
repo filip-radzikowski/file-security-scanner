@@ -3,6 +3,7 @@ import { Pressable, StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import type { ModuleRecord } from '../db/schema';
 import { getModuleDefinition } from '../modules/registry';
+import { LockedCard } from '../unlocks/LockedCard';
 import type { ModuleData } from '../modules/types';
 import { colors, hairlineWidth, radius, shadows } from '../theme';
 import { CARD_H, CARD_W } from './constants';
@@ -23,7 +24,8 @@ export const CanvasCard = memo(function CanvasCard({ module, data, onPressIn, on
   const def = getModuleDefinition(module.type);
   // Only animate cards that were just created, not ones scrolling back into view.
   const fresh = useMemo(() => Date.now() - module.addedAt < 4000, [module.addedAt]);
-  const summary = def.summarize(data);
+  const locked = module.status === 'locked';
+  const summary = locked ? 'Locked' : def.summarize(data);
 
   return (
     <Animated.View
@@ -35,10 +37,10 @@ export const CanvasCard = memo(function CanvasCard({ module, data, onPressIn, on
         onPress={() => onOpen(module.id)}
         accessibilityRole="button"
         accessibilityLabel={`${module.title}. ${summary}`}
-        accessibilityHint="Opens the full dashboard"
-        style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+        accessibilityHint={locked ? 'Shows what unlocks it and how long is left' : 'Opens the full dashboard'}
+        style={({ pressed }) => [styles.card, locked && styles.locked, pressed && styles.pressed]}
       >
-        <def.Card module={module} />
+        {locked ? <LockedCard module={module} /> : <def.Card module={module} />}
       </Pressable>
     </Animated.View>
   );
@@ -54,5 +56,6 @@ const styles = StyleSheet.create({
     borderColor: colors.hairline,
     ...shadows.card,
   },
+  locked: { backgroundColor: colors.sandSoft, borderStyle: 'dashed', borderColor: colors.trail, shadowOpacity: 0 },
   pressed: { backgroundColor: colors.ivoryPressed },
 });

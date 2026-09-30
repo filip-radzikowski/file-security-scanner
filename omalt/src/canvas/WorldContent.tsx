@@ -62,7 +62,8 @@ export const WorldContent = memo(function WorldContent({
   const modules = useOmaltStore((s) => s.modules);
   const tasks = useOmaltStore((s) => s.tasks);
   const moods = useOmaltStore((s) => s.moods);
-  const data: ModuleData = useMemo(() => ({ tasks, moods }), [tasks, moods]);
+  const entries = useOmaltStore((s) => s.entries);
+  const data: ModuleData = useMemo(() => ({ tasks, moods, entries }), [tasks, moods, entries]);
 
   const [cellKey, setCellKey] = useState(() => {
     const cx = Math.floor(-tx.value / CULL_CELL);

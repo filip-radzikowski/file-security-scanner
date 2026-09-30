@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import type { ModuleRecord } from '../db/schema';
+import type { Entry, ModuleRecord } from '../db/schema';
 import type { MoodPoint } from './mood/schema';
 import type { TaskItem } from './todo/schema';
 
@@ -7,6 +7,7 @@ import type { TaskItem } from './todo/schema';
 export interface ModuleData {
   tasks: TaskItem[];
   moods: MoodPoint[];
+  entries: Entry[];
 }
 
 export interface CardProps {

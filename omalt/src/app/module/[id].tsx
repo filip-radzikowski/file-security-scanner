@@ -1,6 +1,7 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { getModuleDefinition } from '../../modules/registry';
+import { LockedDashboard } from '../../unlocks/LockedDashboard';
 import { useOmaltStore } from '../../store/useOmaltStore';
 
 export default function ModuleScreen() {
@@ -19,7 +20,7 @@ export default function ModuleScreen() {
   }, [module]);
 
   if (!module) return null;
-  const { Dashboard } = getModuleDefinition(module.type);
+  const Dashboard = module.status === 'locked' ? LockedDashboard : getModuleDefinition(module.type).Dashboard;
   return (
     <>
       <Stack.Screen options={{ title: module.title }} />

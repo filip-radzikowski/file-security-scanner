@@ -41,7 +41,7 @@ const Note = memo(function Note({ entry, index }: { entry: Entry; index: number 
   const [open, setOpen] = useState(false);
   const slot = NOTE_SLOTS[index];
   // Only animate a note that was just written, not one scrolling back into view.
-  const fresh = useMemo(() => Date.now() - entry.createdAt < 4000, [entry.createdAt]);
+  const fresh = useMemo(() => Math.abs(Date.now() - entry.createdAt) < 4000, [entry.createdAt]);
   return (
     <Animated.View
       entering={fresh ? FadeInDown.duration(500) : undefined}

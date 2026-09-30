@@ -8,7 +8,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppText } from '../components/AppText';
@@ -28,10 +28,24 @@ export default function RootLayout() {
   const ready = useOmaltStore((s) => s.ready);
   const error = useOmaltStore((s) => s.error);
   const init = useOmaltStore((s) => s.init);
+  const syncUnlocks = useOmaltStore((s) => s.syncUnlocks);
 
   useEffect(() => {
     init();
   }, [init]);
+
+  // Time-based unlocks: re-check every minute and whenever the app returns to the foreground.
+  useEffect(() => {
+    if (!ready) return;
+    const timer = setInterval(() => syncUnlocks(), 60000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncUnlocks();
+    });
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [ready, syncUnlocks]);
 
   const done = (fontsLoaded || !!fontError) && ready;
   useEffect(() => {
