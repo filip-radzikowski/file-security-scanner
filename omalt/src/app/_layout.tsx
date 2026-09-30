@@ -4,7 +4,7 @@ import {
 } from '@expo-google-fonts/fraunces';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from '@expo-google-fonts/inter';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -74,7 +74,11 @@ export default function RootLayout() {
     maybeShowNudge();
     refreshNudgeSchedule();
     try {
-      return listenForNudges(showNudge);
+      return listenForNudges(showNudge, (type) => {
+        // A notification about a module (e.g. an unlock): open that module's dashboard.
+        const module = useOmaltStore.getState().modules.find((m) => m.type === type);
+        if (module) setTimeout(() => router.push({ pathname: '/module/[id]', params: { id: module.id } }), 400);
+      });
     } catch {
       return undefined;
     }

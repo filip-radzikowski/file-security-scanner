@@ -1,12 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { NUDGES, nudgeById } from './nudges';
+import type { PlannedReminder } from './reminders';
 
 const CHANNEL_ID = 'nudges';
-/** One nudge a day, at a random time in this window (local time). */
-const EARLIEST_HOUR = 10;
-const LATEST_HOUR = 19;
-const DAYS_AHEAD = 7;
 
 /** While the app is open the in-app card handles nudges, so don't also show a banner. */
 export function configureNotificationHandler(): void {
@@ -37,36 +34,22 @@ async function ensureChannel(): Promise<void> {
   }
 }
 
-function shuffled<T>(items: T[]): T[] {
-  const a = [...items];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-/** Replaces any scheduled nudges with a fresh random week: one per day, different prompts. */
-export async function scheduleNudges(now: Date = new Date()): Promise<void> {
+/** Replaces everything scheduled with the given plan. */
+export async function scheduleReminders(plan: PlannedReminder[]): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
   await ensureChannel();
-  const order = shuffled(NUDGES);
-  for (let d = 0; d < DAYS_AHEAD; d++) {
-    const when = new Date(now);
-    when.setDate(when.getDate() + d);
-    when.setHours(
-      EARLIEST_HOUR + Math.floor(Math.random() * (LATEST_HOUR - EARLIEST_HOUR + 1)),
-      Math.floor(Math.random() * 60),
-      0,
-      0,
-    );
-    if (when.getTime() < now.getTime() + 5 * 60 * 1000) continue;
-    const nudge = order[d % order.length];
+  for (const r of plan) {
     await Notifications.scheduleNotificationAsync({
-      content: { title: nudge.notification.title, body: nudge.notification.body, data: { nudgeId: nudge.id } },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when, channelId: CHANNEL_ID },
+      identifier: r.id,
+      content: { title: r.title, body: r.body, data: r.data },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: r.at, channelId: CHANNEL_ID },
     });
   }
+}
+
+/** Cancels one scheduled reminder, e.g. today's streak nudge once the user has written. */
+export async function cancelReminder(id: string): Promise<void> {
+  await Notifications.cancelScheduledNotificationAsync(id);
 }
 
 export async function cancelNudges(): Promise<void> {
@@ -92,22 +75,32 @@ function nudgeIdFrom(data: unknown): string | null {
   return typeof id === 'string' && nudgeById(id) ? id : null;
 }
 
+function moduleTypeFrom(data: unknown): string | null {
+  const t = (data as { openModuleType?: unknown } | null | undefined)?.openModuleType;
+  return typeof t === 'string' ? t : null;
+}
+
 /**
- * Calls `onNudge` when a nudge notification arrives while the app is open, or is tapped
- * (including the tap that launched the app). Returns a cleanup function.
+ * Calls `onNudge` when a check-in notification arrives while the app is open, or is tapped
+ * (including the tap that launched the app). Notifications that point at a module (an unlock)
+ * call `onOpenModule` when tapped. Returns a cleanup function.
  */
-export function listenForNudges(onNudge: (id: string) => void): () => void {
+export function listenForNudges(onNudge: (id: string) => void, onOpenModule: (type: string) => void): () => void {
   const received = Notifications.addNotificationReceivedListener((n) => {
     const id = nudgeIdFrom(n.request.content.data);
     if (id) onNudge(id);
   });
-  const tapped = Notifications.addNotificationResponseReceivedListener((r) => {
-    const id = nudgeIdFrom(r.notification.request.content.data);
-    if (id) onNudge(id);
-  });
+  const handleTap = (data: unknown) => {
+    const type = moduleTypeFrom(data);
+    if (type) onOpenModule(type);
+    else {
+      const id = nudgeIdFrom(data);
+      if (id) onNudge(id);
+    }
+  };
+  const tapped = Notifications.addNotificationResponseReceivedListener((r) => handleTap(r.notification.request.content.data));
   const launch = Notifications.getLastNotificationResponse();
-  const launchId = launch ? nudgeIdFrom(launch.notification.request.content.data) : null;
-  if (launchId) onNudge(launchId);
+  if (launch) handleTap(launch.notification.request.content.data);
   return () => {
     received.remove();
     tapped.remove();

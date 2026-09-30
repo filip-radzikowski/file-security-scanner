@@ -35,10 +35,25 @@ interface Props {
   initial: number;
   /** Called with the rounded 0-100 value whenever it changes. */
   onChange: (value: number) => void;
+  /** Word shown beside the number. Defaults to the mood words (Low ... Great). */
+  wordFor?: (value: number) => string;
+  /** Shown right after the number, e.g. "%". */
+  suffix?: string;
+  /** Screen-reader description of what is being set. */
+  label?: string;
+  /** Captions under the left end, the middle and the right end. */
+  ends?: [string, string, string];
 }
 
 /** Drag-left-to-right feeling scale, 0 to 100. The thumb grows and the colour warms as you move. */
-export function FeelingSlider({ initial, onChange }: Props) {
+export function FeelingSlider({
+  initial,
+  onChange,
+  wordFor = moodLabel,
+  suffix = '',
+  label = 'How do you feel, from 0 to 100',
+  ends = ['0 · Low', '50', 'Great · 100'],
+}: Props) {
   const [value, setValue] = useState(Math.round(initial));
   const pos = useSharedValue(Math.round(initial) / 100);
   const trackW = useSharedValue(0);
@@ -125,9 +140,10 @@ export function FeelingSlider({ initial, onChange }: Props) {
       <View style={styles.readout}>
         <AppText variant="display" accessibilityElementsHidden importantForAccessibility="no">
           {value}
+          {suffix}
         </AppText>
         <AppText variant="heading" tone="soft" accessibilityElementsHidden importantForAccessibility="no">
-          {moodLabel(value)}
+          {wordFor(value)}
         </AppText>
       </View>
 
@@ -137,8 +153,8 @@ export function FeelingSlider({ initial, onChange }: Props) {
           onLayout={onLayout}
           accessible
           accessibilityRole="adjustable"
-          accessibilityLabel="How do you feel, from 0 to 100"
-          accessibilityValue={{ min: 0, max: 100, now: value, text: `${value}, ${moodLabel(value)}` }}
+          accessibilityLabel={label}
+          accessibilityValue={{ min: 0, max: 100, now: value, text: `${value}${suffix}, ${wordFor(value)}` }}
           accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
           onAccessibilityAction={onAccessibilityAction}
         >
@@ -155,13 +171,13 @@ export function FeelingSlider({ initial, onChange }: Props) {
 
       <View style={styles.ends} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <AppText variant="small" tone="soft">
-          0 · Low
+          {ends[0]}
         </AppText>
         <AppText variant="small" tone="soft">
-          50
+          {ends[1]}
         </AppText>
         <AppText variant="small" tone="soft">
-          Great · 100
+          {ends[2]}
         </AppText>
       </View>
     </View>

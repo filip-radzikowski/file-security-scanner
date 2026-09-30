@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -36,6 +37,7 @@ function NudgeBody({ nudge, cap }: { nudge: Nudge; cap?: number }) {
   const answer = useOmaltStore((s) => s.answerNudge);
   const dismiss = useOmaltStore((s) => s.dismissNudge);
   const setNudgesEnabled = useOmaltStore((s) => s.setNudgesEnabled);
+  const modules = useOmaltStore((s) => s.modules);
   const [stage, setStage] = useState<'ask' | 'more'>('ask');
   const [picked, setPicked] = useState<'yes' | 'no' | null>(null);
   const [text, setText] = useState('');
@@ -72,6 +74,25 @@ function NudgeBody({ nudge, cap }: { nudge: Nudge; cap?: number }) {
             await setNudgesEnabled(true);
           }}
         />
+        <PillButton label="Not now" kind="secondary" maxFontSizeMultiplier={cap} onPress={dismiss} />
+      </View>
+    );
+  }
+
+  if (nudge.kind === 'open' && nudge.open) {
+    const target = modules.find((m) => m.type === nudge.open?.moduleType && m.status !== 'locked');
+    return (
+      <View style={styles.actions}>
+        {target ? (
+          <PillButton
+            label={nudge.open.label}
+            maxFontSizeMultiplier={cap}
+            onPress={() => {
+              dismiss();
+              router.push({ pathname: '/module/[id]', params: { id: target.id } });
+            }}
+          />
+        ) : null}
         <PillButton label="Not now" kind="secondary" maxFontSizeMultiplier={cap} onPress={dismiss} />
       </View>
     );
@@ -143,7 +164,7 @@ export function NudgeCard({ capFontScale }: { capFontScale?: boolean }) {
   return (
     <Animated.View key={nudge.id} entering={FadeInDown.duration(350)} style={styles.card} accessibilityLiveRegion="polite">
       <AppText variant="small" tone="sage" style={styles.eyebrow} maxFontSizeMultiplier={cap}>
-        {nudge.kind === 'notify' ? 'A THOUGHT FROM OMALT' : 'QUICK CHECK-IN'}
+        {nudge.kind === 'notify' ? 'A THOUGHT FROM OMALT' : nudge.kind === 'open' ? 'A REMINDER' : 'QUICK CHECK-IN'}
       </AppText>
       <AppText variant="body" maxFontSizeMultiplier={cap}>
         {nudge.prompt}

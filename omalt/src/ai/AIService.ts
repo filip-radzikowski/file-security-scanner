@@ -26,6 +26,8 @@ export interface DetectedTopic {
   value?: number;
   /** e.g. the weather condition ("rainy"). */
   label?: string;
+  /** For sleep: how rested the user feels, 0-100. */
+  rested?: number;
 }
 
 export interface EntryAnalysis {

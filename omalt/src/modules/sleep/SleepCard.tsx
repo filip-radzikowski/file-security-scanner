@@ -16,7 +16,11 @@ export function SleepCard({ module }: CardProps) {
         {week.lastNight === null ? 'Nothing yet' : formatHours(week.lastNight)}
       </AppText>
       <AppText variant="small" tone="soft" numberOfLines={1} maxFontSizeMultiplier={cardTextScale}>
-        {week.average === null ? 'Log last night' : `Avg ${formatHours(Math.round(week.average * 10) / 10)}`}
+        {week.average === null
+          ? 'Log last night'
+          : week.restedAverage === null
+            ? `Avg ${formatHours(Math.round(week.average * 10) / 10)}`
+            : `Avg ${formatHours(Math.round(week.average * 10) / 10)} · ${Math.round(week.restedAverage)}% rested`}
       </AppText>
     </CardFrame>
   );

@@ -119,14 +119,27 @@ export function detectTopics(text: string): DetectedTopic[] {
     }
 
     // sleep
-    if (!topics.some((t) => t.type === 'sleep') && /\b(slept|sleep|sleeping|asleep|nap|napped|insomnia|bedtime|went to bed)\b/.test(lower)) {
+    if (/\b(slept|sleep|sleeping|asleep|nap|napped|insomnia|bedtime|went to bed)\b/.test(lower)) {
       let hours: number | undefined;
       const num = lower.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/);
       const word = lower.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+hours?\b/);
       if (num) hours = parseFloat(num[1]);
       else if (word) hours = WORD_NUMBERS[word[1]];
       if (hours !== undefined && (hours <= 0 || hours > 16)) hours = undefined;
-      topics.push({ type: 'sleep', value: hours });
+      const known = topics.find((t) => t.type === 'sleep');
+      if (known) known.value ??= hours;
+      else topics.push({ type: 'sleep', value: hours });
+    }
+
+    // "70% rested" / "rested 70%" can sit in a separate sentence from the hours
+    if (/(\d{1,3})\s*%\s*(?:rested|refreshed|energi[sz]ed)|(?:rested|refreshed)\D{0,12}(\d{1,3})\s*%/.test(lower)) {
+      const m = lower.match(/(\d{1,3})\s*%\s*(?:rested|refreshed|energi[sz]ed)|(?:rested|refreshed)\D{0,12}(\d{1,3})\s*%/);
+      const n = parseInt((m?.[1] ?? m?.[2]) as string, 10);
+      if (n >= 0 && n <= 100) {
+        const existing = topics.find((t) => t.type === 'sleep');
+        if (existing) existing.rested = n;
+        else topics.push({ type: 'sleep', rested: n });
+      }
     }
 
     // steps

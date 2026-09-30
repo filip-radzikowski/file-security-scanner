@@ -3,7 +3,7 @@
  * Every answer becomes an ordinary diary entry, so the usual detection (tasks, mood,
  * weather, sleep, steps) and module suggestions keep working.
  */
-export type NudgeKind = 'choice' | 'yesno' | 'text' | 'notify';
+export type NudgeKind = 'choice' | 'yesno' | 'text' | 'notify' | 'open';
 
 export interface Nudge {
   id: string;
@@ -15,6 +15,8 @@ export interface Nudge {
   /** kind "yesno": the answer, then an optional "tell me more" box. */
   yes?: { sentence: string; askMore: string };
   no?: { sentence: string; askMore: string };
+  /** kind "open": a button that opens a module (used by task and recap reminders). */
+  open?: { moduleType: string; label: string };
   /** kind "text": a box; `toSentence` turns the typed text into the diary entry. */
   text?: { placeholder: string; numeric?: boolean; toSentence: (t: string) => string };
 }
@@ -101,6 +103,41 @@ export const NUDGES: Nudge[] = [
   },
 ];
 
+/**
+ * Prompts that notification reminders point at. They are not in the random pool: each is
+ * tied to a specific reminder (evening reflection, streak keeper, task and weekly recap).
+ */
+export const EXTRA_NUDGES: Nudge[] = [
+  {
+    id: 'evening',
+    kind: 'text',
+    prompt: 'How was today? One line is enough.',
+    notification: { title: 'Omalt', body: 'How was today? One line is enough.' },
+    text: { placeholder: 'One line about today', toSentence: (t) => `Today: ${t}` },
+  },
+  {
+    id: 'streak',
+    kind: 'text',
+    prompt: "Keep your streak going. What's one thing from today?",
+    notification: { title: 'Omalt', body: 'One line today keeps your streak going.' },
+    text: { placeholder: 'One thing from today', toSentence: (t) => `Today: ${t}` },
+  },
+  {
+    id: 'tasks-open',
+    kind: 'open',
+    prompt: "You've still got open tasks. Want to tick one off?",
+    notification: { title: 'Your to-do list', body: 'You have open tasks.' },
+    open: { moduleType: 'todo', label: 'Open to-do' },
+  },
+  {
+    id: 'recap',
+    kind: 'open',
+    prompt: "It's the end of the week. Want a look back at how it went?",
+    notification: { title: 'Your week in Omalt', body: 'Take a look back.' },
+    open: { moduleType: 'reflect', label: 'Open Reflect' },
+  },
+];
+
 /** Shown once, in the app only, to offer notifications. Not part of the random pool. */
 export const NOTIFY_NUDGE: Nudge = {
   id: 'enable-notifications',
@@ -110,7 +147,15 @@ export const NOTIFY_NUDGE: Nudge = {
 };
 
 export function nudgeById(id: string): Nudge | undefined {
-  return id === NOTIFY_NUDGE.id ? NOTIFY_NUDGE : NUDGES.find((n) => n.id === id);
+  if (id === NOTIFY_NUDGE.id) return NOTIFY_NUDGE;
+  return NUDGES.find((n) => n.id === id) ?? EXTRA_NUDGES.find((n) => n.id === id);
+}
+
+/** A nudge that suits the time of day: the sleep question in the morning, a reflection in the evening. */
+export function timeOfDayNudge(hour: number): Nudge | null {
+  if (hour >= 5 && hour < 11) return nudgeById('sleep') ?? null;
+  if (hour >= 19 && hour < 23) return nudgeById('evening') ?? null;
+  return null;
 }
 
 /** A random nudge that wasn't shown recently. */

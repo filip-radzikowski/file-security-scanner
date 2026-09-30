@@ -7,6 +7,7 @@ import { Screen } from '../components/Screen';
 import { useOmaltStore } from '../store/useOmaltStore';
 import { BUILD_ID } from '../lib/build';
 import { scheduleTestNudge } from '../nudges/notifications';
+import { REMINDER_CATEGORIES } from '../nudges/reminders';
 import { colors, spacing } from '../theme';
 
 export default function Settings() {
@@ -21,6 +22,8 @@ export default function Settings() {
   const nudgesEnabled = useOmaltStore((s) => s.nudgesEnabled);
   const setNudgesEnabled = useOmaltStore((s) => s.setNudgesEnabled);
   const showNudge = useOmaltStore((s) => s.showNudge);
+  const reminderPrefs = useOmaltStore((s) => s.reminderPrefs);
+  const setReminderPref = useOmaltStore((s) => s.setReminderPref);
   const daysAhead = Math.round(clockOffsetMs / (24 * 60 * 60 * 1000));
 
   const confirmReset = () =>
@@ -108,12 +111,40 @@ export default function Settings() {
             accessibilityLabel="Gentle nudges"
           />
         </View>
+        {nudgesEnabled ? (
+          <View style={styles.categories}>
+            <AppText variant="label" tone="soft">
+              WHICH REMINDERS
+            </AppText>
+            {REMINDER_CATEGORIES.map((c) => (
+              <View key={c.id} style={styles.switchRow}>
+                <View style={styles.switchText}>
+                  <AppText variant="bodyStrong">{c.label}</AppText>
+                  <AppText variant="small" tone="soft">
+                    {c.description}
+                  </AppText>
+                </View>
+                <Switch
+                  value={reminderPrefs[c.id]}
+                  onValueChange={(on) => setReminderPref(c.id, on)}
+                  trackColor={{ false: colors.sand, true: colors.sage }}
+                  thumbColor={colors.ivory}
+                  accessibilityLabel={c.label}
+                />
+              </View>
+            ))}
+            <AppText variant="small" tone="soft">
+              Never more than three a day.
+            </AppText>
+          </View>
+        ) : null}
         <View style={styles.buttons}>
           <PillButton
-            label="Show a check-in now"
+            label="Show a reminder now"
             kind="secondary"
             onPress={() => {
-              showNudge(['weather', 'gym', 'sleep', 'steps', 'plan', 'grateful', 'energy', 'water'][Math.floor(Math.random() * 8)]);
+              const ids = ['weather', 'gym', 'sleep', 'steps', 'plan', 'grateful', 'energy', 'water', 'evening', 'streak', 'tasks-open', 'recap'];
+              showNudge(ids[Math.floor(Math.random() * ids.length)]);
               router.back();
             }}
           />
@@ -169,4 +200,5 @@ const styles = StyleSheet.create({
   switchText: { flex: 1, gap: spacing.xs },
   footer: { textAlign: 'center' },
   buttons: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  categories: { gap: spacing.md },
 });

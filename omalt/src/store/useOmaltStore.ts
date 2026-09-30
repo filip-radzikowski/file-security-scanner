@@ -10,8 +10,9 @@ import * as repo from '../db/repo';
 import type { Entry, ExtractedItemRow, ModuleRecord, Suggestion } from '../db/schema';
 import { makeId } from '../lib/ids';
 import { titleForType } from '../modules/meta';
-import { NOTIFY_NUDGE, nudgeById, pickNudge } from '../nudges/nudges';
-import { cancelNudges, ensurePermission, scheduleNudges } from '../nudges/notifications';
+import { NOTIFY_NUDGE, nudgeById, pickNudge, timeOfDayNudge } from '../nudges/nudges';
+import { cancelNudges, cancelReminder, ensurePermission, scheduleReminders } from '../nudges/notifications';
+import { DEFAULT_REMINDER_PREFS, ReminderCategory, ReminderPrefs, planReminders, ymd } from '../nudges/reminders';
 import { praiseForEntry, praiseForTask } from '../nudges/praise';
 import { HEART_ITEM_TYPE, heartPayloadSchema } from '../modules/heart/schema';
 import { SLEEP_ITEM_TYPE, sleepPayloadSchema } from '../modules/sleep/schema';
@@ -48,11 +49,14 @@ const KV_HEALTH_DEVICES = 'health.devices';
 const KV_HEALTH_SYNCED = 'health.syncedAt';
 const KV_HEALTH_PRAISED = 'health.praisedSteps';
 const KV_NUDGES_ENABLED = 'settings.nudges';
+const KV_REMINDER_PREFS = 'settings.reminders';
 const KV_NUDGE_LAST = 'nudge.last';
 const KV_NUDGE_RECENT = 'nudge.recent';
 const KV_NUDGE_ASKED = 'nudge.askedNotify';
 const KV_NUDGE_SCHEDULED = 'nudge.scheduledAt';
 const FOLLOWUP_ITEM_TYPE = 'followup';
+/** Re-plan notifications at most this often, unless something relevant changed. */
+const SCHEDULE_REFRESH_MS = 6 * 60 * 60 * 1000;
 /** Minimum gap between in-app nudges. */
 const NUDGE_GAP_MS = 3 * 60 * 60 * 1000;
 const TOPIC_MODULE_TYPES = [WEATHER_ITEM_TYPE, SLEEP_ITEM_TYPE, STEPS_ITEM_TYPE, HEART_ITEM_TYPE];
@@ -118,6 +122,8 @@ interface OmaltState {
   /** The nudge (quick prompt) currently offered, if any. */
   activeNudge: string | null;
   nudgesEnabled: boolean;
+  /** Which kinds of notification reminders are on (when nudges are enabled). */
+  reminderPrefs: ReminderPrefs;
 
   /** Where steps, sleep and heart data come from, if anywhere. */
   healthSource: HealthSourceKind | null;
@@ -141,6 +147,7 @@ interface OmaltState {
   /** Returns false if notification permission was refused. */
   setNudgesEnabled(on: boolean): Promise<boolean>;
   refreshNudgeSchedule(force?: boolean): Promise<void>;
+  setReminderPref(category: ReminderCategory, on: boolean): Promise<void>;
   connectHealth(kind: HealthSourceKind): Promise<ConnectResult>;
   disconnectHealth(): Promise<void>;
   syncHealth(): Promise<void>;
@@ -297,6 +304,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     cheer: null,
     activeNudge: null,
     nudgesEnabled: false,
+    reminderPrefs: DEFAULT_REMINDER_PREFS,
     healthSource: null,
     healthDaily: {},
     heart: null,
@@ -305,7 +313,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
 
     async init() {
       try {
-        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw, smoothRaw, sourceRaw, heartRaw, devicesRaw, syncedRaw, healthRows] =
+        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw, smoothRaw, sourceRaw, heartRaw, devicesRaw, syncedRaw, healthRows, prefsRaw] =
           await Promise.all([
           repo.listEntries(),
           repo.listExtractedItems(),
@@ -321,6 +329,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
           repo.getKv(KV_HEALTH_DEVICES),
           repo.getKv(KV_HEALTH_SYNCED),
           repo.listHealthDaily(),
+          repo.getKv(KV_REMINDER_PREFS),
         ]);
 
         let listView = listViewRaw === '1';
@@ -361,7 +370,24 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         } catch {
           devices = [];
         }
+        let reminderPrefs = DEFAULT_REMINDER_PREFS;
+        try {
+          const parsed = z
+            .object({
+              checkins: z.boolean(),
+              sleep: z.boolean(),
+              evening: z.boolean(),
+              tasks: z.boolean(),
+              streak: z.boolean(),
+              milestones: z.boolean(),
+            })
+            .safeParse(prefsRaw ? JSON.parse(prefsRaw) : null);
+          if (parsed.success) reminderPrefs = parsed.data;
+        } catch {
+          reminderPrefs = DEFAULT_REMINDER_PREFS;
+        }
         set({
+          reminderPrefs,
           healthSource: sourceRaw === 'apple' || sourceRaw === 'demo' ? sourceRaw : null,
           healthDaily,
           heart,
@@ -416,7 +442,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
             id: makeId('itm'),
             entryId: entry.id,
             type: SLEEP_ITEM_TYPE,
-            payload: JSON.stringify(sleepPayloadSchema.parse({ hours: t.value })),
+            payload: JSON.stringify(sleepPayloadSchema.parse({ hours: t.value, rested: t.rested })),
           });
         } else if (t.type === 'heart') {
           newItems.push({
@@ -466,6 +492,8 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         moodValue: entry.mood,
       });
       if (opts?.announce !== false) get().showCheer(message);
+      // Written today, so today's streak reminder is no longer needed.
+      if (get().nudgesEnabled) cancelReminder(`streak-${ymd(new Date())}`).catch(() => {});
 
       return { taskCount: analysis.tasks.length, mood: entry.mood, message };
     },
@@ -513,7 +541,8 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         } catch {
           recent = [];
         }
-        id = pickNudge(recent.slice(-3)).id;
+        const byTime = timeOfDayNudge(new Date().getHours());
+        id = byTime && !recent.slice(-3).includes(byTime.id) ? byTime.id : pickNudge(recent.slice(-3)).id;
         await repo.setKv(KV_NUDGE_RECENT, JSON.stringify([...recent, id].slice(-6)));
       }
       await repo.setKv(KV_NUDGE_LAST, String(Date.now()));
@@ -551,13 +580,38 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     async refreshNudgeSchedule(force) {
       if (!get().nudgesEnabled) return;
       const at = Number(await repo.getKv(KV_NUDGE_SCHEDULED));
-      if (!force && Number.isFinite(at) && Date.now() - at < DAY_MS) return;
+      if (!force && Number.isFinite(at) && Date.now() - at < SCHEDULE_REFRESH_MS) return;
       try {
-        await scheduleNudges();
+        const { entries, tasks, modules, reminderPrefs } = get();
+        const stats = computeStats(entries, tasks);
+        const today = ymd(new Date());
+        const unlocks = UNLOCK_RULES.flatMap((rule) => {
+          if (rule.metric.kind !== 'elapsed' || stats.firstEntryAt === null) return [];
+          const m = modules.find((x) => x.type === rule.moduleType);
+          if (m && m.status !== 'locked') return [];
+          const when = stats.firstEntryAt + rule.metric.ms;
+          return when > Date.now() ? [{ moduleType: rule.moduleType, title: rule.title, at: when }] : [];
+        });
+        await scheduleReminders(
+          planReminders({
+            prefs: reminderPrefs,
+            openTasks: tasks.filter((t) => !t.done).length,
+            streak: streakInfo(entries, Date.now()).current,
+            wroteToday: entries.some((e) => ymd(new Date(e.createdAt)) === today),
+            unlocks,
+          }),
+        );
         await repo.setKv(KV_NUDGE_SCHEDULED, String(Date.now()));
       } catch {
         // Notifications are optional; never break the app over them.
       }
+    },
+
+    async setReminderPref(category, on) {
+      const reminderPrefs = { ...get().reminderPrefs, [category]: on };
+      set({ reminderPrefs });
+      await repo.setKv(KV_REMINDER_PREFS, JSON.stringify(reminderPrefs));
+      await get().refreshNudgeSchedule(true);
     },
 
     async acceptSuggestion(id) {
@@ -803,6 +857,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         cheer: null,
         activeNudge: null,
         nudgesEnabled: false,
+        reminderPrefs: DEFAULT_REMINDER_PREFS,
         healthSource: null,
         healthDaily: {},
         heart: null,

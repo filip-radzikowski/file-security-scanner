@@ -1,2 +1,2 @@
 /** Bump when shipping a visible change; shown in Settings so it's easy to confirm which version is running. */
-export const BUILD_ID = 'health-1';
+export const BUILD_ID = 'remind-1';
