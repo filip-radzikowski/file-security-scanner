@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** SQL for the local-first store. Bump SCHEMA_VERSION and add a migration step when it changes. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const CREATE_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS entries (
@@ -50,7 +50,8 @@ export const entryRowSchema = z.object({
   id: z.string(),
   text: z.string(),
   createdAt: z.number(),
-  mood: z.number().int().min(1).max(5).nullable(),
+  /** How the user felt, 0 (low) to 100 (great). */
+  mood: z.number().int().min(0).max(100).nullable(),
 });
 export type Entry = z.infer<typeof entryRowSchema>;
 

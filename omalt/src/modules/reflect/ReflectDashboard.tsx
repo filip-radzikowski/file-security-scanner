@@ -53,7 +53,7 @@ export function ReflectDashboard(_props: DashboardProps) {
         <AppText variant="heading">
           {week.moodAverage === null
             ? 'No mood written about this week'
-            : `Mostly ${moodLabel(week.moodAverage).toLowerCase()} (${week.moodAverage.toFixed(1)} of 5)`}
+            : `Mostly ${moodLabel(week.moodAverage).toLowerCase()} (${Math.round(week.moodAverage)} out of 100)`}
         </AppText>
       </Panel>
 

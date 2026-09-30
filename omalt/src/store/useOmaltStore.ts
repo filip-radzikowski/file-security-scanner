@@ -10,7 +10,15 @@ import { makeId } from '../lib/ids';
 import { titleForType } from '../modules/meta';
 import { computeProgress, computeStats } from '../unlocks/progress';
 import { UNLOCK_RULES } from '../unlocks/rules';
-import { MOOD_ITEM_TYPE, MOOD_LEVELS, MoodPoint, deriveMoods, moodPayloadSchema } from '../modules/mood/schema';
+import {
+  MOOD_ITEM_TYPE,
+  MOOD_LEVELS,
+  MoodPoint,
+  deriveMoods,
+  moodIndex,
+  moodPayloadSchema,
+  valueForLevel,
+} from '../modules/mood/schema';
 import {
   TASK_ITEM_TYPE,
   TaskItem,
@@ -68,7 +76,8 @@ interface OmaltState {
   dismissSuggestion(id: string): Promise<void>;
   toggleTask(id: string): Promise<void>;
   addTask(text: string): Promise<void>;
-  logMood(score: number): Promise<void>;
+  /** value is 0-100. */
+  logMood(value: number): Promise<void>;
   markModuleUsed(id: string): Promise<void>;
   setListView(value: boolean): Promise<void>;
   savePanCenter(x: number, y: number): void;
@@ -245,7 +254,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         id: makeId('ent'),
         text,
         createdAt: nowMs(),
-        mood: analysis.mood?.score ?? null,
+        mood: analysis.mood ? valueForLevel(analysis.mood.score) : null,
       };
       const newItems: ExtractedItemRow[] = analysis.tasks.map((t) => ({
         id: makeId('itm'),
@@ -275,7 +284,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       await refreshSuggestions();
       await enqueueUnlockSync();
 
-      return { taskCount: analysis.tasks.length, mood: analysis.mood?.score ?? null };
+      return { taskCount: analysis.tasks.length, mood: entry.mood };
     },
 
     async acceptSuggestion(id) {
@@ -341,20 +350,21 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       set({ items, ...derive(get().entries, items) });
     },
 
-    async logMood(score) {
-      const level = MOOD_LEVELS.find((l) => l.score === score);
-      if (!level) return;
+    async logMood(rawValue) {
+      if (!Number.isFinite(rawValue)) return;
+      const value = Math.min(100, Math.max(0, Math.round(rawValue)));
+      const level = MOOD_LEVELS[moodIndex(value)];
       const entry: Entry = {
         id: makeId('ent'),
-        text: `Feeling ${level.label.toLowerCase()} today.`,
+        text: `Feeling ${level.label.toLowerCase()} today (${value}/100).`,
         createdAt: nowMs(),
-        mood: level.score,
+        mood: value,
       };
       const item: ExtractedItemRow = {
         id: makeId('itm'),
         entryId: entry.id,
         type: MOOD_ITEM_TYPE,
-        payload: JSON.stringify(moodPayloadSchema.parse({ score: level.score, words: [], source: 'log' })),
+        payload: JSON.stringify(moodPayloadSchema.parse({ score: level.score, value, words: [], source: 'log' })),
       };
       await repo.inTransaction(async () => {
         await repo.insertEntry(entry);

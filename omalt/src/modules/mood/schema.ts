@@ -6,27 +6,42 @@ export const MOOD_ITEM_TYPE = 'mood';
 
 /** JSON stored in extracted_items.payload for type "mood". */
 export const moodPayloadSchema = z.object({
+  /** Coarse level 1-5 (what the keyword rules detect). */
   score: z.number().int().min(1).max(5),
+  /** Precise feeling 0-100, present when it came from the slider. */
+  value: z.number().min(0).max(100).optional(),
   words: z.array(z.string()).default([]),
   source: z.enum(['text', 'log']).default('text'),
 });
 export type MoodPayload = z.infer<typeof moodPayloadSchema>;
 
+/** Five named bands across the 0-100 scale. `value` is the middle of each band. */
 export const MOOD_LEVELS = [
-  { score: 1, label: 'Low' },
-  { score: 2, label: 'Down' },
-  { score: 3, label: 'Okay' },
-  { score: 4, label: 'Good' },
-  { score: 5, label: 'Great' },
+  { score: 1, label: 'Low', value: 10 },
+  { score: 2, label: 'Down', value: 30 },
+  { score: 3, label: 'Okay', value: 50 },
+  { score: 4, label: 'Good', value: 70 },
+  { score: 5, label: 'Great', value: 90 },
 ] as const;
 
-export function moodLabel(score: number): string {
-  return MOOD_LEVELS.find((l) => l.score === Math.round(score))?.label ?? 'Okay';
+/** 0..4 band index for a 0-100 value. */
+export function moodIndex(value: number): number {
+  return Math.min(4, Math.max(0, Math.floor(value / 20)));
+}
+
+export function moodLabel(value: number): string {
+  return MOOD_LEVELS[moodIndex(value)].label;
+}
+
+/** Converts a coarse 1-5 level to a 0-100 value. */
+export function valueForLevel(score: number): number {
+  return MOOD_LEVELS[Math.min(4, Math.max(0, score - 1))].value;
 }
 
 export interface MoodPoint {
   entryId: string;
   createdAt: number;
+  /** 0-100 */
   score: number;
 }
 

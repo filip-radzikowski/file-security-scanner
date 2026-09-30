@@ -4,7 +4,7 @@ import { CardFrame, cardTextScale } from '../../components/CardFrame';
 import { useOmaltStore } from '../../store/useOmaltStore';
 import { colors } from '../../theme';
 import type { CardProps } from '../types';
-import { moodLabel, weeklyAverage, weeklyMood } from './schema';
+import { moodIndex, moodLabel, weeklyAverage, weeklyMood } from './schema';
 import { useMemo } from 'react';
 
 export function MoodCard({ module }: CardProps) {
@@ -23,8 +23,8 @@ export function MoodCard({ module }: CardProps) {
             style={[
               styles.bar,
               {
-                height: d.average === null ? 4 : 4 + (d.average / 5) * 20,
-                backgroundColor: d.average === null ? colors.sandSoft : colors.mood[Math.round(d.average) - 1],
+                height: d.average === null ? 4 : 4 + (d.average / 100) * 20,
+                backgroundColor: d.average === null ? colors.sandSoft : colors.mood[moodIndex(d.average)],
               },
             ]}
           />

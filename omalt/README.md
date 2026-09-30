@@ -32,7 +32,7 @@ Only Expo Go-bundled native modules are used (`expo-sqlite`, `expo-font`, `expo-
 1. Write entries such as *"I need to call the dentist"*, *"I have to pay rent and I must email Sam"*, or *"todo: buy milk"*.
 2. After **3 task mentions** a card appears under the text box: *"You mentioned tasks 3 times. Would a to-do list help?"* Tap **Add**; a To-do card appears near the centre on a dotted trail, and the canvas pans to show it.
 3. Tap the card to open its dashboard: progress, tickable tasks pulled from your entries, and an add-task field. Go back and the canvas is exactly where you left it.
-4. Write something like *"I'm feeling great today"* (or *"feeling tired"*). A **Mood** suggestion appears after a single mention. Add it, then open it to log with the five-button "how are you today" row and see the weekly chart and average.
+4. Write something like *"I'm feeling great today"* (or *"feeling tired"*). A **Mood** suggestion appears after a single mention. Add it, then open it: drag the animated 0 to 100 feeling scale (or tap the bar) and press **Log**, or pick one of the five words. The weekly chart and average are on the same 0 to 100 scale.
 5. **Settings** has the *Plain list view* toggle (a linear alternative to the canvas; it turns on by default if a screen reader is running on first launch) and *Erase all data*.
 
 The mock detects tasks from *need to, have to, must, got to, gotta, remember to, don't forget to, todo*. Moods come from a small word list (with simple negation, e.g. "not good") and only count in a feeling context ("I feel...", "I'm...", or a very short entry).
@@ -85,6 +85,8 @@ To preview time-based unlocks, **Settings > Preview unlocks > Skip ahead 1 day**
 - **Ambient dots**: a deterministic scatter of sand and sage dots covers the whole world (generated per grid cell, nothing stored), so cards, trails and notes sit in one connected field.
 - **Thought notes**: your last five entries float up from the wordmark as small notes joined by a dotted chain, newest closest and fading with age. Tap one to expand it. The plain list view shows the same entries under "Recent thoughts".
 - **Growth hint**: under the text box, whenever there is no suggestion to act on, the canvas says "Keep writing, and Omalt will suggest what to add here."
+- **Recentre**: the canvas flies to the centre in a straight line, with a slow start and soft landing; longer trips take longer (0.7s to 1.8s).
+- **Mood scale**: `entries.mood` is 0 to 100 (schema v2; v1 data is migrated, each old 1-5 level mapping to the middle of its band: 10, 30, 50, 70, 90). Keyword-detected moods use the same band middles. Five bands are named Low, Down, Okay, Good, Great.
 - **Persistence**: entries, extracted items, modules and suggestions are in SQLite (`omalt.db`). A small extra `kv` table stores the last pan position (as the world point at the viewport centre) and settings.
 - **Suggestions**: one per module type. "Not now" snoozes it until enough new mentions accumulate (3 more for tasks, 5 more for mood).
 - **Accessibility**: labelled controls, 44 pt touch targets, Dynamic Type honoured (capped on fixed-size canvas cards), text-safe sage/sand shades for contrast, and the plain list view.

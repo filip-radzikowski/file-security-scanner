@@ -1,12 +1,14 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '../../components/AppText';
+import { PillButton } from '../../components/PillButton';
 import { Panel } from '../../components/Panel';
 import { Screen } from '../../components/Screen';
 import { useOmaltStore } from '../../store/useOmaltStore';
 import { colors, hairlineWidth, hitTarget, radius, spacing } from '../../theme';
 import type { DashboardProps } from '../types';
-import { MOOD_LEVELS, moodLabel, todaysMood, weeklyAverage, weeklyMood } from './schema';
+import { FeelingSlider } from './FeelingSlider';
+import { MOOD_LEVELS, moodIndex, moodLabel, todaysMood, weeklyAverage, weeklyMood } from './schema';
 
 const CHART_HEIGHT = 140;
 
@@ -18,25 +20,59 @@ export function MoodDashboard(_props: DashboardProps) {
   const average = weeklyAverage(days);
   const today = todaysMood(moods);
 
+  // The slider keeps its own draft; nothing is saved until "Log it".
+  const draft = useRef(today ?? 50);
+  const [draftValue, setDraftValue] = useState(Math.round(today ?? 50));
+  const [justLogged, setJustLogged] = useState<number | null>(null);
+  const onSlide = useCallback((v: number) => {
+    draft.current = v;
+    setDraftValue(v);
+    setJustLogged(null);
+  }, []);
+  const logDraft = async () => {
+    const v = draft.current;
+    await logMood(v);
+    setJustLogged(v);
+  };
+
   const chartSummary = days
-    .map((d) => `${d.label}: ${d.average === null ? 'no entry' : moodLabel(d.average)}`)
+    .map((d) => `${d.label}: ${d.average === null ? 'no entry' : `${moodLabel(d.average)}, ${Math.round(d.average)}`}`)
     .join(', ');
 
   return (
     <Screen>
       <Panel>
         <AppText variant="label" tone="sage">
-          HOW ARE YOU TODAY
+          HOW DO YOU FEEL RIGHT NOW
+        </AppText>
+        <FeelingSlider initial={today ?? 50} onChange={onSlide} />
+        <PillButton
+          label={justLogged === null ? `Log ${draftValue}` : `Logged ${justLogged}`}
+          accessibilityLabel={justLogged === null ? `Log ${draftValue} out of 100` : `Logged ${justLogged} out of 100`}
+          onPress={logDraft}
+          disabled={justLogged !== null}
+          style={styles.logButton}
+        />
+        <AppText variant="small" tone="soft" accessibilityLiveRegion="polite">
+          {justLogged === null
+            ? 'Drag the dot or tap the bar, then log it.'
+            : `Saved: ${moodLabel(justLogged)}, ${justLogged} out of 100.`}
+        </AppText>
+      </Panel>
+
+      <Panel>
+        <AppText variant="label" tone="soft">
+          OR PICK A WORD
         </AppText>
         <View style={styles.buttons}>
           {MOOD_LEVELS.map((level) => {
-            const selected = today === level.score;
+            const selected = today !== null && moodIndex(today) === level.score - 1;
             return (
               <Pressable
                 key={level.score}
-                onPress={() => logMood(level.score)}
+                onPress={() => logMood(level.value)}
                 accessibilityRole="button"
-                accessibilityLabel={`${level.label}, ${level.score} out of 5`}
+                accessibilityLabel={`${level.label}, about ${level.value} out of 100`}
                 accessibilityState={{ selected }}
                 style={({ pressed }) => [styles.moodButton, pressed && styles.pressed]}
               >
@@ -48,7 +84,7 @@ export function MoodDashboard(_props: DashboardProps) {
                   ]}
                 >
                   <AppText variant="bodyStrong" tone="onSage" allowFontScaling={false}>
-                    {level.score}
+                    {level.value}
                   </AppText>
                 </View>
                 <AppText variant="small" tone={selected ? 'ink' : 'soft'} numberOfLines={1}>
@@ -59,7 +95,7 @@ export function MoodDashboard(_props: DashboardProps) {
           })}
         </View>
         <AppText variant="small" tone="soft" accessibilityLiveRegion="polite">
-          {today === null ? 'Tap one to log how today feels.' : `Today: ${moodLabel(today)}. Tap again to log another.`}
+          {today === null ? 'Tap one to log how today feels.' : `Today: ${moodLabel(today)} (${Math.round(today)}). Tap again to log another.`}
         </AppText>
       </Panel>
 
@@ -69,15 +105,15 @@ export function MoodDashboard(_props: DashboardProps) {
         </AppText>
         <View style={styles.averageRow}>
           <AppText variant="display" accessibilityRole="header">
-            {average === null ? '–' : average.toFixed(1)}
+            {average === null ? '–' : Math.round(average)}
           </AppText>
           <AppText variant="body" tone="soft">
-            {average === null ? 'No entries yet' : `average · ${moodLabel(average)}`}
+            {average === null ? 'No entries yet' : `average out of 100 · ${moodLabel(average)}`}
           </AppText>
         </View>
         <View style={styles.chart} accessible accessibilityRole="image" accessibilityLabel={`Weekly mood. ${chartSummary}`}>
           {days.map((d) => {
-            const h = d.average === null ? 6 : Math.max(10, (d.average / 5) * CHART_HEIGHT);
+            const h = d.average === null ? 6 : Math.max(10, (d.average / 100) * CHART_HEIGHT);
             return (
               <View key={d.date.getTime()} style={styles.barCol}>
                 <View style={styles.barSlot}>
@@ -87,7 +123,7 @@ export function MoodDashboard(_props: DashboardProps) {
                       {
                         height: h,
                         backgroundColor:
-                          d.average === null ? colors.sandSoft : colors.mood[Math.round(d.average) - 1],
+                          d.average === null ? colors.sandSoft : colors.mood[moodIndex(d.average)],
                       },
                       d.isToday && styles.barToday,
                     ]}
@@ -106,6 +142,7 @@ export function MoodDashboard(_props: DashboardProps) {
 }
 
 const styles = StyleSheet.create({
+  logButton: { alignSelf: 'flex-start' },
   buttons: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.xs },
   moodButton: { flex: 1, alignItems: 'center', gap: spacing.xs, minHeight: hitTarget, borderRadius: radius.sm },
   pressed: { opacity: 0.7 },

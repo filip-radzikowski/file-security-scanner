@@ -28,6 +28,12 @@ const MAX_FLICK = 8000;
 /** Closer to 1 glides longer. 0.998 is native iOS scroll deceleration; it keeps flowing after release. */
 const DECELERATION = 0.998;
 
+/** Flight timing: longer trips take longer, with a slow start and a soft landing. */
+const FLIGHT_EASING = Easing.bezier(0.45, 0, 0.2, 1);
+function flight(distance: number, base: number, perPoint: number, max: number) {
+  return { duration: Math.min(max, base + distance * perPoint), easing: FLIGHT_EASING };
+}
+
 /**
  * Turns the release velocity (pt/s) into the glide's starting velocity. Harder flicks get a
  * small extra boost so they travel noticeably further, and the cap keeps them controllable.
@@ -139,9 +145,12 @@ export function Canvas() {
 
   const recentre = useCallback(() => {
     Keyboard.dismiss();
-    const config = { duration: 500, easing: Easing.out(Easing.cubic) };
-    tx.value = withTiming(viewW.value / 2 - CENTER, config);
-    ty.value = withTiming(viewH.value / 2 - CENTER, config, (finished) => {
+    const targetX = viewW.value / 2 - CENTER;
+    const targetY = viewH.value / 2 - CENTER;
+    // Both axes share one duration so the canvas travels in a straight line.
+    const config = flight(Math.hypot(targetX - tx.value, targetY - ty.value), 700, 0.4, 1800);
+    tx.value = withTiming(targetX, config);
+    ty.value = withTiming(targetY, config, (finished) => {
       if (finished) scheduleOnRN(persist);
     });
   }, [tx, ty, viewW, viewH, persist]);
@@ -163,7 +172,7 @@ export function Canvas() {
       if (sy < top) dy = top - sy;
       else if (sy > bottom) dy = bottom - sy;
       if (dx === 0 && dy === 0) return;
-      const config = { duration: 600, easing: Easing.inOut(Easing.cubic) };
+      const config = flight(Math.hypot(dx, dy), 600, 0.35, 1400);
       tx.value = withTiming(clamp(tx.value + dx, viewW.value - WORLD_SIZE, 0), config);
       ty.value = withTiming(clamp(ty.value + dy, viewH.value - WORLD_SIZE, 0), config, (finished) => {
         if (finished) scheduleOnRN(persist);
