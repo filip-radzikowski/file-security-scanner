@@ -1,4 +1,5 @@
 import { genericModule } from './generic';
+import { heartModule } from './heart';
 import { moodModule } from './mood';
 import { reflectModule } from './reflect';
 import { sleepModule } from './sleep';
@@ -16,6 +17,7 @@ const definitions: Record<string, ModuleDefinition> = {
   weather: weatherModule,
   sleep: sleepModule,
   steps: stepsModule,
+  heart: heartModule,
 };
 
 /** Falls back to the generic placeholder for any module type without its own folder. */

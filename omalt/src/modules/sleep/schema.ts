@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Entry, ExtractedItemRow } from '../../db/schema';
+import type { HealthDailyMap } from '../../health';
 import { DatedValue, WeekSlot, deriveDated, lastSevenDays } from '../daily';
 
 export const SLEEP_ITEM_TYPE = 'sleep';
@@ -24,9 +25,10 @@ export function hoursForDay(slot: WeekSlot<SleepPayload>): number | null {
   return null;
 }
 
-export function weeklySleep(points: DatedValue<SleepPayload>[], now?: Date) {
+/** Synced hours win over typed ones for a day. */
+export function weeklySleep(points: DatedValue<SleepPayload>[], now?: Date, health: HealthDailyMap = {}) {
   const slots = lastSevenDays(points, now);
-  const hours = slots.map(hoursForDay);
+  const hours = slots.map((s) => health[s.key]?.sleepHours ?? hoursForDay(s));
   const logged = hours.filter((h): h is number => h !== null);
   return {
     slots,

@@ -1,13 +1,13 @@
 import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { colors } from '../theme';
-import { Point, trailDots } from './layout';
+import { Point, Rect, trailDots } from './layout';
 
 const DOT = 5;
 
 /** Faint dotted line from the centre to a card. */
-export const Trail = memo(function Trail({ x, y }: { x: number; y: number }) {
-  const dots = useMemo(() => trailDots({ x, y }), [x, y]);
+export const Trail = memo(function Trail({ x, y, others }: { x: number; y: number; others: Rect[] }) {
+  const dots = useMemo(() => trailDots({ x, y }, others), [x, y, others]);
   return (
     <View pointerEvents="none" style={styles.layer} importantForAccessibility="no-hide-descendants">
       {dots.map((d: Point, i: number) => (

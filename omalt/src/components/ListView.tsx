@@ -50,8 +50,13 @@ export function ListView() {
   const moods = useOmaltStore((s) => s.moods);
   const entries = useOmaltStore((s) => s.entries);
   const items = useOmaltStore((s) => s.items);
+  const health = useOmaltStore((s) => s.healthDaily);
+  const heart = useOmaltStore((s) => s.heart);
   const recent = useMemo(() => entries.slice(-5).reverse(), [entries]);
-  const data = useMemo(() => ({ tasks, moods, entries, items }), [tasks, moods, entries, items]);
+  const data = useMemo(
+    () => ({ tasks, moods, entries, items, health, heart }),
+    [tasks, moods, entries, items, health, heart],
+  );
 
   return (
     <ScrollView

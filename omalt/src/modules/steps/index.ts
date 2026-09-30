@@ -7,8 +7,8 @@ export const stepsModule: ModuleDefinition = {
   type: 'steps',
   Card: StepsCard,
   Dashboard: StepsDashboard,
-  summarize: ({ items, entries }) => {
-    const w = weeklySteps(deriveSteps(items, entries));
+  summarize: ({ items, entries, health }) => {
+    const w = weeklySteps(deriveSteps(items, entries), undefined, health);
     return w.today === null ? 'No steps today' : `${w.today.toLocaleString()} steps today`;
   },
 };

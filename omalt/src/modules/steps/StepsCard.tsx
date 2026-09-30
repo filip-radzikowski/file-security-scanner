@@ -9,7 +9,8 @@ import { STEPS_GOAL, deriveSteps, weeklySteps } from './schema';
 export function StepsCard({ module }: CardProps) {
   const items = useOmaltStore((s) => s.items);
   const entries = useOmaltStore((s) => s.entries);
-  const week = useMemo(() => weeklySteps(deriveSteps(items, entries)), [items, entries]);
+  const health = useOmaltStore((s) => s.healthDaily);
+  const week = useMemo(() => weeklySteps(deriveSteps(items, entries), undefined, health), [items, entries, health]);
   const today = week.today ?? 0;
   return (
     <CardFrame title={module.title}>

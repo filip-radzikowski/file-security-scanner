@@ -18,7 +18,7 @@ export interface DetectedMood {
 }
 
 /** Everyday topics the mock can pick out of free text. */
-export type TopicType = 'weather' | 'sleep' | 'steps' | 'workout';
+export type TopicType = 'weather' | 'sleep' | 'steps' | 'workout' | 'heart';
 
 export interface DetectedTopic {
   type: TopicType;

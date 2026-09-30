@@ -4,6 +4,7 @@ import { AppText } from '../../components/AppText';
 import { DayBars } from '../../components/DayBars';
 import { Panel } from '../../components/Panel';
 import { PillButton } from '../../components/PillButton';
+import { SyncNote } from '../../components/SyncNote';
 import { Screen } from '../../components/Screen';
 import { useNow } from '../../lib/useNow';
 import { useOmaltStore } from '../../store/useOmaltStore';
@@ -15,10 +16,11 @@ export function StepsDashboard(_props: DashboardProps) {
   const items = useOmaltStore((s) => s.items);
   const entries = useOmaltStore((s) => s.entries);
   const addEntry = useOmaltStore((s) => s.addEntry);
+  const health = useOmaltStore((s) => s.healthDaily);
   const now = useNow(60000);
   const [draft, setDraft] = useState('');
 
-  const week = useMemo(() => weeklySteps(deriveSteps(items, entries), new Date(now)), [items, entries, now]);
+  const week = useMemo(() => weeklySteps(deriveSteps(items, entries), new Date(now), health), [items, entries, now, health]);
   const today = week.today ?? 0;
   const pct = Math.min(100, Math.round((today / STEPS_GOAL) * 100));
   const bars = week.slots.map((s, i) => ({ key: s.key, label: s.label, value: week.totals[i], isToday: s.isToday }));
@@ -35,6 +37,7 @@ export function StepsDashboard(_props: DashboardProps) {
   return (
     <Screen>
       <Panel>
+        <SyncNote metric="steps" />
         <AppText variant="label" tone="sage">
           TODAY
         </AppText>

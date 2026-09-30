@@ -1,7 +1,9 @@
+import { format } from 'date-fns';
 import { AccessibilityInfo } from 'react-native';
 import { create } from 'zustand';
 import { z } from 'zod';
-import { aiService } from '../ai';
+import { ModuleSuggestionCandidate, aiService } from '../ai';
+import { HealthDailyMap, HealthSourceKind, HeartReading, SOURCE_LABELS, getHealthService } from '../health';
 import { CENTER } from '../canvas/constants';
 import { findSpawnPosition } from '../canvas/layout';
 import * as repo from '../db/repo';
@@ -11,8 +13,9 @@ import { titleForType } from '../modules/meta';
 import { NOTIFY_NUDGE, nudgeById, pickNudge } from '../nudges/nudges';
 import { cancelNudges, ensurePermission, scheduleNudges } from '../nudges/notifications';
 import { praiseForEntry, praiseForTask } from '../nudges/praise';
+import { HEART_ITEM_TYPE, heartPayloadSchema } from '../modules/heart/schema';
 import { SLEEP_ITEM_TYPE, sleepPayloadSchema } from '../modules/sleep/schema';
-import { STEPS_ITEM_TYPE, stepsPayloadSchema } from '../modules/steps/schema';
+import { STEPS_GOAL, STEPS_ITEM_TYPE, stepsPayloadSchema } from '../modules/steps/schema';
 import { streakInfo } from '../modules/streak/schema';
 import { WEATHER_ITEM_TYPE, weatherPayloadSchema } from '../modules/weather/schema';
 import { computeProgress, computeStats } from '../unlocks/progress';
@@ -39,6 +42,11 @@ const KV_LIST_VIEW = 'settings.listView';
 const KV_PAN_CENTER = 'canvas.panCenter';
 const KV_SMOOTH_MOTION = 'settings.smoothMotion';
 const KV_CLOCK_OFFSET = 'debug.clockOffsetMs';
+const KV_HEALTH_SOURCE = 'health.source';
+const KV_HEALTH_HEART = 'health.heart';
+const KV_HEALTH_DEVICES = 'health.devices';
+const KV_HEALTH_SYNCED = 'health.syncedAt';
+const KV_HEALTH_PRAISED = 'health.praisedSteps';
 const KV_NUDGES_ENABLED = 'settings.nudges';
 const KV_NUDGE_LAST = 'nudge.last';
 const KV_NUDGE_RECENT = 'nudge.recent';
@@ -47,7 +55,17 @@ const KV_NUDGE_SCHEDULED = 'nudge.scheduledAt';
 const FOLLOWUP_ITEM_TYPE = 'followup';
 /** Minimum gap between in-app nudges. */
 const NUDGE_GAP_MS = 3 * 60 * 60 * 1000;
-const TOPIC_MODULE_TYPES = [WEATHER_ITEM_TYPE, SLEEP_ITEM_TYPE, STEPS_ITEM_TYPE];
+const TOPIC_MODULE_TYPES = [WEATHER_ITEM_TYPE, SLEEP_ITEM_TYPE, STEPS_ITEM_TYPE, HEART_ITEM_TYPE];
+const HEALTH_MODULES: { type: string; title: string }[] = [
+  { type: 'steps', title: 'step tracker' },
+  { type: 'sleep', title: 'sleep tracker' },
+  { type: 'heart', title: 'heart tile' },
+];
+
+export interface ConnectResult {
+  ok: boolean;
+  message?: string;
+}
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const entryTextSchema = z.string().trim().min(1).max(4000);
@@ -101,6 +119,14 @@ interface OmaltState {
   activeNudge: string | null;
   nudgesEnabled: boolean;
 
+  /** Where steps, sleep and heart data come from, if anywhere. */
+  healthSource: HealthSourceKind | null;
+  healthDaily: HealthDailyMap;
+  heart: HeartReading | null;
+  healthSyncedAt: number | null;
+  /** Wearables the user says they own (chosen on the Health screen). */
+  devices: string[];
+
   init(): Promise<void>;
   /** Saves a diary entry. Pass announce: false when the caller shows the returned message itself. */
   addEntry(text: string, opts?: { announce?: boolean }): Promise<AddEntryResult | null>;
@@ -115,6 +141,11 @@ interface OmaltState {
   /** Returns false if notification permission was refused. */
   setNudgesEnabled(on: boolean): Promise<boolean>;
   refreshNudgeSchedule(force?: boolean): Promise<void>;
+  connectHealth(kind: HealthSourceKind): Promise<ConnectResult>;
+  disconnectHealth(): Promise<void>;
+  syncHealth(): Promise<void>;
+  refreshHeart(): Promise<void>;
+  toggleDevice(id: string): Promise<void>;
   acceptSuggestion(id: string): Promise<string | null>;
   dismissSuggestion(id: string): Promise<void>;
   toggleTask(id: string): Promise<void>;
@@ -154,7 +185,30 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     }).length;
     const topicMentions: Record<string, number> = {};
     for (const i of items) if (TOPIC_MODULE_TYPES.includes(i.type)) topicMentions[i.type] = (topicMentions[i.type] ?? 0) + 1;
-    const candidates = await aiService.suggestModules({ taskMentions, moodMentions, topicMentions });
+    const aiCandidates = await aiService.suggestModules({ taskMentions, moodMentions, topicMentions });
+    const candidates: ModuleSuggestionCandidate[] = [...aiCandidates];
+    const { healthSource, devices } = get();
+    const add = (c: ModuleSuggestionCandidate) => {
+      if (!candidates.some((x) => x.moduleType === c.moduleType)) candidates.push(c);
+    };
+    if (healthSource) {
+      for (const m of HEALTH_MODULES) {
+        add({
+          moduleType: m.type,
+          reason: `${SOURCE_LABELS[healthSource]} is connected. Want a ${m.title} on your canvas?`,
+          mentionCount: 1,
+          resurfaceAfter: 5,
+        });
+      }
+    }
+    if (devices.length > 0) {
+      add({
+        moduleType: 'heart',
+        reason: 'You have a wearable. Want a heart tile that pulses with your heart rate?',
+        mentionCount: 1,
+        resurfaceAfter: 5,
+      });
+    }
     const writes = reconcileSuggestions(candidates, suggestions, modules);
     if (writes.length === 0) return;
     for (const w of writes) await repo.upsertSuggestion(w);
@@ -243,10 +297,16 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     cheer: null,
     activeNudge: null,
     nudgesEnabled: false,
+    healthSource: null,
+    healthDaily: {},
+    heart: null,
+    healthSyncedAt: null,
+    devices: [],
 
     async init() {
       try {
-        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw, smoothRaw] = await Promise.all([
+        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw, smoothRaw, sourceRaw, heartRaw, devicesRaw, syncedRaw, healthRows] =
+          await Promise.all([
           repo.listEntries(),
           repo.listExtractedItems(),
           repo.listModules(),
@@ -256,6 +316,11 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
           repo.getKv(KV_CLOCK_OFFSET),
           repo.getKv(KV_NUDGES_ENABLED),
           repo.getKv(KV_SMOOTH_MOTION),
+          repo.getKv(KV_HEALTH_SOURCE),
+          repo.getKv(KV_HEALTH_HEART),
+          repo.getKv(KV_HEALTH_DEVICES),
+          repo.getKv(KV_HEALTH_SYNCED),
+          repo.listHealthDaily(),
         ]);
 
         let listView = listViewRaw === '1';
@@ -279,7 +344,29 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         }
 
         const offset = Number(offsetRaw);
+        const healthDaily: HealthDailyMap = {};
+        for (const r of healthRows) {
+          healthDaily[r.day] = { ...healthDaily[r.day], [r.metric]: r.value };
+        }
+        let heart: HeartReading | null = null;
+        try {
+          const parsed = z.object({ bpm: z.number(), at: z.number() }).safeParse(heartRaw ? JSON.parse(heartRaw) : null);
+          if (parsed.success) heart = parsed.data;
+        } catch {
+          heart = null;
+        }
+        let devices: string[] = [];
+        try {
+          devices = z.array(z.string()).catch([]).parse(devicesRaw ? JSON.parse(devicesRaw) : []);
+        } catch {
+          devices = [];
+        }
         set({
+          healthSource: sourceRaw === 'apple' || sourceRaw === 'demo' ? sourceRaw : null,
+          healthDaily,
+          heart,
+          devices,
+          healthSyncedAt: Number(syncedRaw) || null,
           entries,
           items,
           modules,
@@ -330,6 +417,13 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
             entryId: entry.id,
             type: SLEEP_ITEM_TYPE,
             payload: JSON.stringify(sleepPayloadSchema.parse({ hours: t.value })),
+          });
+        } else if (t.type === 'heart') {
+          newItems.push({
+            id: makeId('itm'),
+            entryId: entry.id,
+            type: HEART_ITEM_TYPE,
+            payload: JSON.stringify(heartPayloadSchema.parse({ bpm: t.value })),
           });
         } else if (t.type === 'steps') {
           newItems.push({
@@ -583,6 +677,94 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       repo.setKv(KV_PAN_CENTER, JSON.stringify({ x, y })).catch(() => {});
     },
 
+    async connectHealth(kind) {
+      const svc = getHealthService(kind);
+      const availability = await svc.availability();
+      if (!availability.available) return { ok: false, message: availability.reason };
+      let granted = false;
+      try {
+        granted = await svc.connect();
+      } catch {
+        granted = false;
+      }
+      if (!granted) return { ok: false, message: 'Permission was not granted. You can change this in the Health app.' };
+
+      if (get().healthSource && get().healthSource !== kind) {
+        await repo.clearHealthDaily();
+        set({ healthDaily: {}, heart: null });
+      }
+      set({ healthSource: kind });
+      await repo.setKv(KV_HEALTH_SOURCE, kind);
+      await get().syncHealth();
+      await refreshSuggestions();
+      get().showCheer(`${SOURCE_LABELS[kind]} connected. Your numbers will show up on your canvas.`);
+      return { ok: true };
+    },
+
+    async disconnectHealth() {
+      set({ healthSource: null, healthDaily: {}, heart: null, healthSyncedAt: null });
+      await repo.clearHealthDaily();
+      await repo.setKv(KV_HEALTH_SOURCE, '');
+      await repo.setKv(KV_HEALTH_HEART, '');
+    },
+
+    async syncHealth() {
+      const kind = get().healthSource;
+      if (!kind) return;
+      try {
+        const days = await getHealthService(kind).fetchDays(14);
+        const now = Date.now();
+        const rows = days.flatMap((d) => {
+          const out: { day: string; metric: 'steps' | 'sleepHours' | 'restingHr'; value: number; source: string; updatedAt: number }[] = [];
+          if (d.steps !== undefined) out.push({ day: d.day, metric: 'steps', value: d.steps, source: kind, updatedAt: now });
+          if (d.sleepHours !== undefined) out.push({ day: d.day, metric: 'sleepHours', value: d.sleepHours, source: kind, updatedAt: now });
+          if (d.restingHr !== undefined) out.push({ day: d.day, metric: 'restingHr', value: d.restingHr, source: kind, updatedAt: now });
+          return out;
+        });
+        await repo.upsertHealthDaily(rows);
+        const healthDaily: HealthDailyMap = { ...get().healthDaily };
+        for (const d of days) {
+          const { day, ...values } = d;
+          healthDaily[day] = { ...healthDaily[day], ...values };
+        }
+        set({ healthDaily, healthSyncedAt: now });
+        await repo.setKv(KV_HEALTH_SYNCED, String(now));
+        await get().refreshHeart();
+
+        // Celebrate reaching the step goal, once per day.
+        const localKey = format(new Date(), 'yyyy-MM-dd');
+        const steps = healthDaily[localKey]?.steps;
+        if (steps !== undefined && steps >= STEPS_GOAL && (await repo.getKv(KV_HEALTH_PRAISED)) !== localKey) {
+          await repo.setKv(KV_HEALTH_PRAISED, localKey);
+          get().showCheer(`${steps.toLocaleString()} steps today. Goal reached, well done!`);
+        }
+      } catch {
+        // Keep showing the last synced values; try again next time.
+      }
+    },
+
+    async refreshHeart() {
+      const kind = get().healthSource;
+      if (!kind) return;
+      try {
+        const reading = await getHealthService(kind).latestHeartRate();
+        if (reading) {
+          set({ heart: reading });
+          repo.setKv(KV_HEALTH_HEART, JSON.stringify(reading)).catch(() => {});
+        }
+      } catch {
+        // ignore; the previous reading stays
+      }
+    },
+
+    async toggleDevice(id) {
+      const has = get().devices.includes(id);
+      const devices = has ? get().devices.filter((d) => d !== id) : [...get().devices, id];
+      set({ devices });
+      await repo.setKv(KV_HEALTH_DEVICES, JSON.stringify(devices));
+      await refreshSuggestions();
+    },
+
     syncUnlocks() {
       return enqueueUnlockSync();
     },
@@ -621,6 +803,11 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         cheer: null,
         activeNudge: null,
         nudgesEnabled: false,
+        healthSource: null,
+        healthDaily: {},
+        heart: null,
+        healthSyncedAt: null,
+        devices: [],
       });
     },
   };

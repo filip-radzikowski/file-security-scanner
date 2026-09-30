@@ -7,13 +7,9 @@ import { AppText } from '../../components/AppText';
 import { Panel } from '../../components/Panel';
 import { PillButton } from '../../components/PillButton';
 import { Screen } from '../../components/Screen';
-import { moodLabel } from '../../modules/mood/schema';
-import { conditionLabel, weatherPayloadSchema } from '../../modules/weather/schema';
+import { thoughtChips } from '../../lib/thoughtChips';
 import { useOmaltStore } from '../../store/useOmaltStore';
 import { colors, fonts, hairlineWidth, radius, spacing } from '../../theme';
-import { formatHours, sleepPayloadSchema } from '../../modules/sleep/schema';
-import { stepsPayloadSchema } from '../../modules/steps/schema';
-import { parseTaskPayload } from '../../modules/todo/schema';
 
 function Chip({ label }: { label: string }) {
   return (
@@ -23,15 +19,6 @@ function Chip({ label }: { label: string }) {
       </AppText>
     </View>
   );
-}
-
-function parse<T>(schema: { safeParse(v: unknown): { success: boolean; data?: T } }, json: string): T | null {
-  try {
-    const r = schema.safeParse(JSON.parse(json));
-    return r.success ? (r.data as T) : null;
-  } catch {
-    return null;
-  }
 }
 
 /** A single thought, opened up: what Omalt noticed, a kind reflection, and room to say more. */
@@ -56,25 +43,7 @@ export default function ThoughtScreen() {
   }, [entry?.id, entry?.text]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mine = useMemo(() => items.filter((i) => i.entryId === id), [items, id]);
-  const chips = useMemo(() => {
-    const out: string[] = [];
-    const tasks = mine.filter((i) => i.type === 'task').map((i) => parseTaskPayload(i.payload)).filter(Boolean);
-    if (tasks.length) out.push(`${tasks.length} task${tasks.length === 1 ? '' : 's'} noticed`);
-    if (entry?.mood != null) out.push(`Feeling ${moodLabel(entry.mood).toLowerCase()} (${entry.mood})`);
-    for (const i of mine) {
-      if (i.type === 'weather') {
-        const w = parse<{ condition?: string }>(weatherPayloadSchema, i.payload);
-        out.push(w?.condition ? `Weather: ${conditionLabel(w.condition)}` : 'Weather');
-      } else if (i.type === 'sleep') {
-        const p = parse<{ hours?: number }>(sleepPayloadSchema, i.payload);
-        out.push(p?.hours ? `Sleep: ${formatHours(p.hours)}` : 'Sleep');
-      } else if (i.type === 'steps') {
-        const p = parse<{ count?: number }>(stepsPayloadSchema, i.payload);
-        out.push(p?.count ? `${p.count.toLocaleString()} steps` : 'Walking');
-      }
-    }
-    return out;
-  }, [mine, entry?.mood]);
+  const chips = useMemo(() => (entry ? thoughtChips(entry, items) : []), [entry, items]);
 
   const followUps = useMemo(() => {
     const out: { id: string; text: string; at: number }[] = [];

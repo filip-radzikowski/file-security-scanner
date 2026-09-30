@@ -78,11 +78,39 @@ To preview time-based unlocks, **Settings > Preview unlocks > Skip ahead 1 day**
 
 ## Thoughts, check-ins, nudges and encouragement
 
-- **Thoughts**: your last five entries float above the wordmark, each marked "Open ›". Tap one to open it: what Omalt noticed (tasks, mood, weather, sleep, steps), a short reflection ("Omalt says"), and a "Go deeper" prompt where you can keep writing; your follow-ups stack under the thought.
+- **Thoughts**: your last five entries float above the wordmark. Tap one to expand it in place (older notes slide up to make room, so nothing overlaps); "Open" inside takes you to the full thought screen: what Omalt noticed (tasks, mood, weather, sleep, steps), a short reflection ("Omalt says"), and a "Go deeper" prompt where you can keep writing; your follow-ups stack under the thought.
 - **Topics**: the mock AI spots weather, sleep (with hours, e.g. "slept 7.5 hours") and steps (e.g. "8k steps") in what you write, and suggests **Weather**, **Sleep** and **Steps** modules after a single mention. Each has a dashboard: tap a condition, step the hours, or add steps; logging writes a normal diary entry, so it shows up as a thought too. There is no health or weather sync in Phase 1; everything is typed or tapped.
 - **Check-ins**: from time to time a quick card appears under the text box ("How's the weather?" with tappable answers, "Did you go to the gym?" Yes/No then a box to tell Omalt about it, "How did you sleep?", steps, one thing to get done, gratitude, energy, water). Every answer becomes a diary entry, so detection and module suggestions keep working. One appears when you open the app if the last was 3+ hours ago.
 - **Notifications**: Settings > Gentle nudges schedules about one check-in a day at a random time between 10:00 and 19:59 for the next week (local notifications through `expo-notifications`, no server, no keys). Tap one to land on that check-in. While the app is open the in-app card is used instead of a banner. After a couple of entries Omalt offers to turn these on, once. Settings also has "Show a check-in now" and "Send a test in 5s".
 - **Encouragement**: Omalt reacts to what you write with a short, specific line (steps goal reached, went to the gym, a good night's sleep, streak milestones, feeling good or low, tasks ticked off) and shows it under the text box or as a banner at the top of any screen.
+
+## Health and devices (steps, sleep, heart rate)
+
+**Settings > Health & devices** connects a source for steps, sleep and heart rate. Health data is read-only and stays on the device.
+
+| Source | Works in Expo Go? | Notes |
+| --- | --- | --- |
+| Apple Health | No. Needs a development build | Real HealthKit data: daily steps, sleep (merged across devices), resting heart rate, and the latest heart rate (re-read every 15 s while a Heart tile is showing). |
+| Demo data | Yes | Simulated numbers, always labelled "simulated", so you can see synced tiles and the pulsing heart in Expo Go. |
+| Typed or tapped | Yes | The Steps, Sleep and Heart dashboards keep their manual inputs; a synced value wins for a day, typed values fill the gaps. |
+
+Watches and rings (Apple Watch, Oura, Whoop, Garmin, Fitbit) write to Apple Health through their own apps, so Omalt reads them from there, including sleep from the device and a live heart rate. Omalt does not talk to device makers' clouds (that needs server-side OAuth keys, which the app must not contain). On the Health screen you can tick which devices you own; owning one suggests the Heart tile.
+
+The **Heart** tile pulses at the current heart rate (a "lub-dub" beat with a soft ripple, one cycle per beat). It follows the phone's Reduce Motion setting and pauses, with a note, when that is on.
+
+Connecting a source adds suggestions for Steps, Sleep and Heart. Reaching 8,000 synced steps earns a cheer, once a day.
+
+### Turning on real Apple Health
+
+HealthKit is a native module, so it is not part of Expo Go. The code loads it lazily, so Expo Go keeps working and simply reports "needs a development build". To use it on an iPhone:
+
+```bash
+npx expo install expo-dev-client
+npx eas-cli@latest build --profile development --platform ios   # cloud build, no Mac needed
+npx expo start --dev-client
+```
+
+An Apple Developer account is required for a device build with the HealthKit capability. (Installing `expo-dev-client` makes `expo start` default to the development build; press `s` to switch back to Expo Go, or run `npx expo start --go`.) The HealthKit calls are type-checked against the library (`@kingstinct/react-native-healthkit`) but have not been run on a real device yet. The config plugin adds the usage description and the HealthKit entitlement.
 
 ## Design notes
 

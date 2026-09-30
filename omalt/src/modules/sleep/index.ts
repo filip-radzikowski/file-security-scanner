@@ -7,8 +7,8 @@ export const sleepModule: ModuleDefinition = {
   type: 'sleep',
   Card: SleepCard,
   Dashboard: SleepDashboard,
-  summarize: ({ items, entries }) => {
-    const w = weeklySleep(deriveSleep(items, entries));
+  summarize: ({ items, entries, health }) => {
+    const w = weeklySleep(deriveSleep(items, entries), undefined, health);
     return w.lastNight === null ? 'No sleep logged yet' : `Last night: ${formatHours(w.lastNight)}`;
   },
 };

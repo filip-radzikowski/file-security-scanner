@@ -3,11 +3,13 @@ import { getDb } from './database';
 import {
   Entry,
   ExtractedItemRow,
+  HealthDailyRow,
   ModuleRecord,
   Suggestion,
   SuggestionStatus,
   entryRowSchema,
   extractedItemRowSchema,
+  healthDailyRowSchema,
   moduleRowSchema,
   suggestionRowSchema,
 } from './schema';
@@ -116,6 +118,33 @@ export async function setSuggestionStatus(id: string, status: SuggestionStatus):
   await db.runAsync('UPDATE suggestions SET status = ? WHERE id = ?', [status, id]);
 }
 
+// ---------- health (synced daily values) ----------
+
+export async function upsertHealthDaily(rows: HealthDailyRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    for (const r of rows) {
+      await db.runAsync(
+        `INSERT INTO health_daily (day, metric, value, source, updatedAt) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(day, metric) DO UPDATE SET value = excluded.value, source = excluded.source, updatedAt = excluded.updatedAt`,
+        [r.day, r.metric, r.value, r.source, r.updatedAt],
+      );
+    }
+  });
+}
+
+export async function listHealthDaily(): Promise<HealthDailyRow[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync('SELECT * FROM health_daily');
+  return parseRows(healthDailyRowSchema, rows);
+}
+
+export async function clearHealthDaily(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM health_daily');
+}
+
 // ---------- key/value (settings, last pan position) ----------
 
 export async function getKv(key: string): Promise<string | null> {
@@ -137,7 +166,7 @@ export async function setKv(key: string, value: string): Promise<void> {
 export async function eraseAll(): Promise<void> {
   const db = await getDb();
   await db.execAsync(
-    'DELETE FROM extracted_items; DELETE FROM entries; DELETE FROM modules; DELETE FROM suggestions; DELETE FROM kv;',
+    'DELETE FROM extracted_items; DELETE FROM entries; DELETE FROM modules; DELETE FROM suggestions; DELETE FROM health_daily; DELETE FROM kv;',
   );
 }
 

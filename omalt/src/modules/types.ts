@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { Entry, ExtractedItemRow, ModuleRecord } from '../db/schema';
+import type { HealthDailyMap, HeartReading } from '../health';
 import type { MoodPoint } from './mood/schema';
 import type { TaskItem } from './todo/schema';
 
@@ -9,6 +10,10 @@ export interface ModuleData {
   moods: MoodPoint[];
   entries: Entry[];
   items: ExtractedItemRow[];
+  /** Synced health values by day. Empty when nothing is connected. */
+  health: HealthDailyMap;
+  /** Latest heart rate from a connected source, if any. */
+  heart: HeartReading | null;
 }
 
 export interface CardProps {

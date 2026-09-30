@@ -25,6 +25,11 @@ export const NOTE_SLOTS = [
   { x: -88, y: -520 },
   { x: 88, y: -610 },
 ] as const;
+/** Expanded note: wider and taller, centred on the column. Height depends on the text (see ThoughtNotes). */
+export const NOTE_OPEN_W = 272;
+/** Tallest an expanded note can be; reserved above the chain so cards never land there. */
+export const NOTE_OPEN_MAX_H = 340;
+export const NOTE_GAP = 14;
 export const NOTE_OPACITY = [1, 0.92, 0.84, 0.76, 0.68] as const;
 /** Where the dotted chain to the notes starts (just above the wordmark). */
 export const NOTE_CHAIN_START = { x: CENTER, y: CENTER - 165 };
@@ -33,7 +38,8 @@ export const NOTE_CHAIN_START = { x: CENTER, y: CENTER - 165 };
 export const RESERVED = {
   left: CENTER - COMPOSER_W / 2 - 24,
   right: CENTER + COMPOSER_W / 2 + 24,
-  top: CENTER + NOTE_SLOTS[NOTE_SLOTS.length - 1].y - NOTE_H / 2 - 30,
+  // Room for the whole chain even with one note expanded (older notes shift up to make space).
+  top: CENTER + NOTE_SLOTS[NOTE_SLOTS.length - 1].y - NOTE_H / 2 - 30 - (NOTE_OPEN_MAX_H - NOTE_H),
   bottom: CENTER + COMPOSER_H / 2 + SUGGESTION_H,
 };
 

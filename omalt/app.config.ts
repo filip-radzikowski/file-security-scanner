@@ -37,6 +37,16 @@ const config: ExpoConfig = {
     ],
     'expo-sqlite',
     ['expo-notifications', { color: '#8FA58A' }],
+    [
+      // Only takes effect in a development build; Expo Go ignores it.
+      '@kingstinct/react-native-healthkit',
+      {
+        NSHealthShareUsageDescription:
+          'Omalt reads your steps, sleep and heart rate to show them on your canvas. Nothing leaves your phone.',
+        NSHealthUpdateUsageDescription: false,
+        background: false,
+      },
+    ],
   ],
 };
 

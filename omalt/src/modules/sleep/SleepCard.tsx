@@ -8,7 +8,8 @@ import { deriveSleep, formatHours, weeklySleep } from './schema';
 export function SleepCard({ module }: CardProps) {
   const items = useOmaltStore((s) => s.items);
   const entries = useOmaltStore((s) => s.entries);
-  const week = useMemo(() => weeklySleep(deriveSleep(items, entries)), [items, entries]);
+  const health = useOmaltStore((s) => s.healthDaily);
+  const week = useMemo(() => weeklySleep(deriveSleep(items, entries), undefined, health), [items, entries, health]);
   return (
     <CardFrame title={module.title}>
       <AppText variant="bodyStrong" numberOfLines={1} maxFontSizeMultiplier={cardTextScale}>

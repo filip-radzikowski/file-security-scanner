@@ -19,6 +19,7 @@ import {
   CHUNK,
   HEADER_H,
   NOTE_H,
+  NOTE_OPEN_MAX_H,
   NOTE_SLOTS,
   NOTE_W,
 } from './constants';
@@ -29,7 +30,7 @@ const CHUNK_STRIDE = 100;
 const NOTES_AREA: Rect = {
   left: CENTER - NOTE_W,
   right: CENTER + NOTE_W,
-  top: CENTER + NOTE_SLOTS[NOTE_SLOTS.length - 1].y - NOTE_H,
+  top: CENTER + NOTE_SLOTS[NOTE_SLOTS.length - 1].y - NOTE_OPEN_MAX_H,
   bottom: CENTER - 100,
 };
 
@@ -63,7 +64,12 @@ export const WorldContent = memo(function WorldContent({
   const moods = useOmaltStore((s) => s.moods);
   const entries = useOmaltStore((s) => s.entries);
   const items = useOmaltStore((s) => s.items);
-  const data: ModuleData = useMemo(() => ({ tasks, moods, entries, items }), [tasks, moods, entries, items]);
+  const health = useOmaltStore((s) => s.healthDaily);
+  const heart = useOmaltStore((s) => s.heart);
+  const data: ModuleData = useMemo(
+    () => ({ tasks, moods, entries, items, health, heart }),
+    [tasks, moods, entries, items, health, heart],
+  );
 
   // Which chunk holds the centre of the viewport. Only a change here triggers a re-render.
   const [chunkKey, setChunkKey] = useState(() => {
@@ -91,6 +97,19 @@ export const WorldContent = memo(function WorldContent({
     };
   }, [chunkKey]);
 
+  // Every card's footprint, with a little breathing room. Dots and trails steer clear of them.
+  const cardRects: Rect[] = useMemo(
+    () =>
+      modules.map((m) => {
+        const r = cardRect(m);
+        return { left: r.left - 14, right: r.right + 14, top: r.top - 14, bottom: r.bottom + 14 };
+      }),
+    [modules],
+  );
+
+  // Stable per-card lists so each Trail's dots are only recomputed when the cards change.
+  const othersFor = useMemo(() => cardRects.map((_, i) => cardRects.filter((__, j) => j !== i)), [cardRects]);
+
   const visible = useMemo(
     () =>
       modules.map((m) => ({
@@ -105,10 +124,17 @@ export const WorldContent = memo(function WorldContent({
 
   return (
     <>
-      <AmbientDots rect={viewRect} />
+      <AmbientDots rect={viewRect} avoid={cardRects} />
 
-      {visible.map(({ module, showTrail }) =>
-        showTrail ? <Trail key={`trail-${module.id}`} x={module.x} y={module.y} /> : null,
+      {visible.map(({ module, showTrail }, i) =>
+        showTrail ? (
+          <Trail
+            key={`trail-${module.id}`}
+            x={module.x}
+            y={module.y}
+            others={othersFor[i]}
+          />
+        ) : null,
       )}
 
       {showNotes ? <ThoughtNotes /> : null}

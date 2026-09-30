@@ -101,7 +101,7 @@ export function dotsBetween(a: Point, b: Point, skip: Rect[], spacing: number = 
 }
 
 /** Points for the faint dotted trail from the centre cluster to a card. */
-export function trailDots(p: Point): Point[] {
+export function trailDots(p: Point, others: Rect[] = []): Point[] {
   const card = cardRect(p);
   const paddedCard: Rect = {
     left: card.left - 8,
@@ -109,5 +109,6 @@ export function trailDots(p: Point): Point[] {
     top: card.top - 8,
     bottom: card.bottom + 8,
   };
-  return dotsBetween({ x: CENTER, y: CENTER }, p, [RESERVED, paddedCard]);
+  // `others` are the other cards' rects, so a trail never runs across a card that isn't its own.
+  return dotsBetween({ x: CENTER, y: CENTER }, p, [RESERVED, paddedCard, ...others]);
 }

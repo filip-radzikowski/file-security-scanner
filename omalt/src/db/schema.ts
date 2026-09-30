@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** SQL for the local-first store. Bump SCHEMA_VERSION and add a migration step when it changes. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const CREATE_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS entries (
@@ -40,11 +40,29 @@ CREATE TABLE IF NOT EXISTS suggestions (
   status TEXT NOT NULL DEFAULT 'pending'
 );
 
+CREATE TABLE IF NOT EXISTS health_daily (
+  day TEXT NOT NULL,
+  metric TEXT NOT NULL,
+  value REAL NOT NULL,
+  source TEXT NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  PRIMARY KEY (day, metric)
+);
+
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL
 );
 `;
+
+export const healthDailyRowSchema = z.object({
+  day: z.string(),
+  metric: z.enum(['steps', 'sleepHours', 'restingHr']),
+  value: z.number(),
+  source: z.string(),
+  updatedAt: z.number(),
+});
+export type HealthDailyRow = z.infer<typeof healthDailyRowSchema>;
 
 export const entryRowSchema = z.object({
   id: z.string(),

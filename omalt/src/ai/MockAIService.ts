@@ -140,6 +140,17 @@ export function detectTopics(text: string): DetectedTopic[] {
       }
     }
 
+    // heart rate
+    if (!topics.some((t) => t.type === 'heart')) {
+      const bpm = lower.match(/(\d{2,3})\s*bpm\b/);
+      if (bpm) {
+        const n = parseInt(bpm[1], 10);
+        topics.push({ type: 'heart', value: n >= 30 && n <= 220 ? n : undefined });
+      } else if (/\b(heart rate|heartrate|pulse|resting heart|heart was racing|heart racing)\b/.test(lower)) {
+        topics.push({ type: 'heart' });
+      }
+    }
+
     // workout (only when it actually happened)
     if (
       !topics.some((t) => t.type === 'workout') &&
@@ -156,6 +167,7 @@ const TOPIC_SUGGESTIONS: Record<string, { reason: string }> = {
   weather: { reason: 'You mentioned the weather. Want a weather log?' },
   sleep: { reason: 'You mentioned your sleep. Want to track it?' },
   steps: { reason: 'You mentioned walking and steps. Want a step tracker?' },
+  heart: { reason: 'You mentioned your heart rate. Want a heart tile that pulses with it?' },
 };
 
 export class MockAIService implements AIService {

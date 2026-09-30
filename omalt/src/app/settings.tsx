@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Alert, Switch, View, StyleSheet } from 'react-native';
+import { Alert, Pressable, Switch, View, StyleSheet } from 'react-native';
 import { AppText } from '../components/AppText';
 import { Panel } from '../components/Panel';
 import { PillButton } from '../components/PillButton';
@@ -48,6 +48,20 @@ export default function Settings() {
           />
         </View>
       </Panel>
+
+      <Pressable
+        onPress={() => router.push('/health')}
+        accessibilityRole="button"
+        accessibilityLabel="Health and devices"
+        accessibilityHint="Connect Apple Health, a watch or a sleep device"
+      >
+        <Panel>
+          <AppText variant="heading">Health & devices {'\u203A'}</AppText>
+          <AppText variant="small" tone="soft">
+            Bring in steps, sleep and heart rate from Apple Health, a watch or a ring.
+          </AppText>
+        </Panel>
+      </Pressable>
 
       <Panel>
         <View style={styles.switchRow}>

@@ -34,6 +34,7 @@ export default function RootLayout() {
   const maybeShowNudge = useOmaltStore((s) => s.maybeShowNudge);
   const showNudge = useOmaltStore((s) => s.showNudge);
   const refreshNudgeSchedule = useOmaltStore((s) => s.refreshNudgeSchedule);
+  const syncHealth = useOmaltStore((s) => s.syncHealth);
 
   useEffect(() => {
     init();
@@ -42,10 +43,15 @@ export default function RootLayout() {
   // Time-based unlocks: re-check every minute and whenever the app returns to the foreground.
   useEffect(() => {
     if (!ready) return;
-    const timer = setInterval(() => syncUnlocks(), 60000);
+    syncHealth();
+    const timer = setInterval(() => {
+      syncUnlocks();
+      syncHealth();
+    }, 60000);
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         syncUnlocks();
+        syncHealth();
         maybeShowNudge();
         refreshNudgeSchedule();
       }
@@ -54,7 +60,7 @@ export default function RootLayout() {
       clearInterval(timer);
       sub.remove();
     };
-  }, [ready, syncUnlocks, maybeShowNudge, refreshNudgeSchedule]);
+  }, [ready, syncUnlocks, syncHealth, maybeShowNudge, refreshNudgeSchedule]);
 
   // Nudges: offer one when the app opens, keep the week's notifications topped up,
   // and react to nudge notifications (received while open, or tapped).
@@ -109,6 +115,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="module/[id]" options={{ title: '', headerBackTitle: 'Canvas' }} />
           <Stack.Screen name="thought/[id]" options={{ title: 'Thought', headerBackTitle: 'Back' }} />
+          <Stack.Screen name="health" options={{ title: 'Health & devices', headerBackTitle: 'Back' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings', headerBackTitle: 'Back' }} />
         </Stack>
       </SafeAreaProvider>
