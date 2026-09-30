@@ -6,17 +6,19 @@ import { useNow } from '../../lib/useNow';
 import { useOmaltStore } from '../../store/useOmaltStore';
 import { colors } from '../../theme';
 import type { CardProps } from '../types';
-import { weekSummary } from './schema';
+import { deriveReflections, reflectedThisWeek, weekSummary } from './schema';
 
 export function ReflectCard({ module }: CardProps) {
   const entries = useOmaltStore((s) => s.entries);
+  const items = useOmaltStore((s) => s.items);
   const tasks = useOmaltStore((s) => s.tasks);
   const now = useNow(60000);
   const week = useMemo(() => weekSummary(entries, tasks, now), [entries, tasks, now]);
+  const done = useMemo(() => reflectedThisWeek(deriveReflections(items, entries), new Date(now)), [items, entries, now]);
   return (
     <CardFrame title={module.title}>
-      <AppText variant="small" tone="soft" numberOfLines={1} maxFontSizeMultiplier={cardTextScale}>
-        {week.entryCount} {week.entryCount === 1 ? 'entry' : 'entries'} this week
+      <AppText variant="small" tone={done ? 'sage' : 'soft'} numberOfLines={1} maxFontSizeMultiplier={cardTextScale}>
+        {done ? 'Reflected this week' : 'Time to reflect'}
       </AppText>
       <View style={styles.dots}>
         {week.days.map((d) => (

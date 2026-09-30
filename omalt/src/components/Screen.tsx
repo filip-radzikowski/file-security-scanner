@@ -14,6 +14,7 @@ export function Screen({ children, contentStyle }: Props) {
       style={styles.scroll}
       contentContainerStyle={[styles.content, contentStyle]}
       keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
       contentInsetAdjustmentBehavior="automatic"
     >
       {children}

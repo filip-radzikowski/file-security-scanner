@@ -15,6 +15,15 @@ import { cancelNudges, cancelReminder, ensurePermission, scheduleReminders } fro
 import { DEFAULT_REMINDER_PREFS, ReminderCategory, ReminderPrefs, planReminders, ymd } from '../nudges/reminders';
 import { praiseForEntry, praiseForTask } from '../nudges/praise';
 import { HEART_ITEM_TYPE, heartPayloadSchema } from '../modules/heart/schema';
+import {
+  DEFAULT_REFLECT_PREFS,
+  REFLECTION_ITEM_TYPE,
+  ReflectPrefs,
+  deriveReflections,
+  reflectPrefsSchema,
+  reflectionPayloadSchema,
+  weeksInARow,
+} from '../modules/reflect/schema';
 import { SLEEP_ITEM_TYPE, sleepPayloadSchema } from '../modules/sleep/schema';
 import { STEPS_GOAL, STEPS_ITEM_TYPE, stepsPayloadSchema } from '../modules/steps/schema';
 import { streakInfo } from '../modules/streak/schema';
@@ -50,6 +59,7 @@ const KV_HEALTH_SYNCED = 'health.syncedAt';
 const KV_HEALTH_PRAISED = 'health.praisedSteps';
 const KV_NUDGES_ENABLED = 'settings.nudges';
 const KV_REMINDER_PREFS = 'settings.reminders';
+const KV_REFLECT_PREFS = 'reflect.prefs';
 const KV_NUDGE_LAST = 'nudge.last';
 const KV_NUDGE_RECENT = 'nudge.recent';
 const KV_NUDGE_ASKED = 'nudge.askedNotify';
@@ -82,6 +92,7 @@ export interface PanCenter {
 }
 
 export interface AddEntryResult {
+  entryId: string;
   taskCount: number;
   mood: number | null;
   /** Omalt's short reaction to what was written. */
@@ -124,6 +135,8 @@ interface OmaltState {
   nudgesEnabled: boolean;
   /** Which kinds of notification reminders are on (when nudges are enabled). */
   reminderPrefs: ReminderPrefs;
+  /** Themes and custom prompts for the Reflect tab. */
+  reflectPrefs: ReflectPrefs;
 
   /** Where steps, sleep and heart data come from, if anywhere. */
   healthSource: HealthSourceKind | null;
@@ -148,6 +161,9 @@ interface OmaltState {
   setNudgesEnabled(on: boolean): Promise<boolean>;
   refreshNudgeSchedule(force?: boolean): Promise<void>;
   setReminderPref(category: ReminderCategory, on: boolean): Promise<void>;
+  setReflectPrefs(prefs: ReflectPrefs): Promise<void>;
+  /** Saves a reflection as a diary entry tagged with its prompt. Returns the entry id. */
+  addReflection(input: { prompt: string; text: string; rating?: number }): Promise<string | null>;
   connectHealth(kind: HealthSourceKind): Promise<ConnectResult>;
   disconnectHealth(): Promise<void>;
   syncHealth(): Promise<void>;
@@ -305,6 +321,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     activeNudge: null,
     nudgesEnabled: false,
     reminderPrefs: DEFAULT_REMINDER_PREFS,
+    reflectPrefs: DEFAULT_REFLECT_PREFS,
     healthSource: null,
     healthDaily: {},
     heart: null,
@@ -313,7 +330,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
 
     async init() {
       try {
-        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw, smoothRaw, sourceRaw, heartRaw, devicesRaw, syncedRaw, healthRows, prefsRaw] =
+        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw, smoothRaw, sourceRaw, heartRaw, devicesRaw, syncedRaw, healthRows, prefsRaw, reflectRaw] =
           await Promise.all([
           repo.listEntries(),
           repo.listExtractedItems(),
@@ -330,6 +347,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
           repo.getKv(KV_HEALTH_SYNCED),
           repo.listHealthDaily(),
           repo.getKv(KV_REMINDER_PREFS),
+          repo.getKv(KV_REFLECT_PREFS),
         ]);
 
         let listView = listViewRaw === '1';
@@ -386,7 +404,15 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         } catch {
           reminderPrefs = DEFAULT_REMINDER_PREFS;
         }
+        let reflectPrefs = DEFAULT_REFLECT_PREFS;
+        try {
+          const parsed = reflectPrefsSchema.safeParse(reflectRaw ? JSON.parse(reflectRaw) : null);
+          if (parsed.success) reflectPrefs = parsed.data;
+        } catch {
+          reflectPrefs = DEFAULT_REFLECT_PREFS;
+        }
         set({
+          reflectPrefs,
           reminderPrefs,
           healthSource: sourceRaw === 'apple' || sourceRaw === 'demo' ? sourceRaw : null,
           healthDaily,
@@ -495,7 +521,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       // Written today, so today's streak reminder is no longer needed.
       if (get().nudgesEnabled) cancelReminder(`streak-${ymd(new Date())}`).catch(() => {});
 
-      return { taskCount: analysis.tasks.length, mood: entry.mood, message };
+      return { entryId: entry.id, taskCount: analysis.tasks.length, mood: entry.mood, message };
     },
 
     async addFollowUp(entryId, rawText) {
@@ -605,6 +631,33 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       } catch {
         // Notifications are optional; never break the app over them.
       }
+    },
+
+    async setReflectPrefs(prefs) {
+      const parsed = reflectPrefsSchema.safeParse(prefs);
+      if (!parsed.success) return;
+      set({ reflectPrefs: parsed.data });
+      await repo.setKv(KV_REFLECT_PREFS, JSON.stringify(parsed.data));
+    },
+
+    async addReflection({ prompt, text, rating }) {
+      const saved = await get().addEntry(text, { announce: false });
+      if (!saved) return null;
+      const item: ExtractedItemRow = {
+        id: makeId('itm'),
+        entryId: saved.entryId,
+        type: REFLECTION_ITEM_TYPE,
+        payload: JSON.stringify(reflectionPayloadSchema.parse({ prompt, rating })),
+      };
+      await repo.insertExtractedItem(item);
+      set((s) => ({ items: [...s.items, item] }));
+      const weeks = weeksInARow(deriveReflections(get().items, get().entries), new Date(nowMs()));
+      get().showCheer(
+        weeks >= 2
+          ? `Reflection saved. That is ${weeks} weeks in a row!`
+          : 'Reflection saved. Thank you for taking the time.',
+      );
+      return saved.entryId;
     },
 
     async setReminderPref(category, on) {
@@ -858,6 +911,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         activeNudge: null,
         nudgesEnabled: false,
         reminderPrefs: DEFAULT_REMINDER_PREFS,
+        reflectPrefs: DEFAULT_REFLECT_PREFS,
         healthSource: null,
         healthDaily: {},
         heart: null,

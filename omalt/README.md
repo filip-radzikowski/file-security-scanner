@@ -119,6 +119,18 @@ npx expo start --dev-client
 
 An Apple Developer account is required for a device build with the HealthKit capability. (Installing `expo-dev-client` makes `expo start` default to the development build; press `s` to switch back to Expo Go, or run `npx expo start --go`.) The HealthKit calls are type-checked against the library (`@kingstinct/react-native-healthkit`) but have not been run on a real device yet. The config plugin adds the usage description and the HealthKit entitlement.
 
+## Reflect
+
+Reflect is a place to write, not just a summary.
+
+- **Your prompt**: a reflection prompt that stays the same for the week ("What went well this week?", "Who made your week better, and how?"), with **Another prompt** to cycle. Write as much or as little as you like and **Save reflection**; it is stored as a normal diary entry tagged with its prompt, so it also appears as a thought and is read by the usual detection (tasks, mood, and so on).
+- **Rate this week**: an optional 0 to 100 slider, saved with the reflection and shown as a badge on it.
+- **Make it yours**: choose which themes you want to be asked about (Wins, Gratitude, Challenges, Growth, People, Body & energy) and add your own prompts, which come up first. At least one theme or one prompt of your own must stay on.
+- **Your reflections**: a timeline of past reflections with their prompt and rating; tap one to open it. A counter tracks weeks in a row, and saving one earns a cheer.
+- **This week at a glance**: the days you wrote, the week's mood and the tasks you ticked off.
+
+The Reflect tile on the canvas says "Reflected this week" or "Time to reflect". Choices are saved in the `kv` table (`reflect.prefs`); reflections are `extracted_items` of type `reflection`.
+
 ## Design notes
 
 - **World**: 6000 x 6000 pt, centred on the text box (3000, 3000). Card `x`/`y` are world-space card centres stored in the `modules` table.

@@ -19,6 +19,8 @@ function parse<T>(schema: { safeParse(v: unknown): { success: boolean; data?: T 
 export function thoughtChips(entry: Entry, items: ExtractedItemRow[]): string[] {
   const mine = items.filter((i) => i.entryId === entry.id);
   const out: string[] = [];
+  const reflection = mine.find((i) => i.type === 'reflection');
+  if (reflection) out.push('Reflection');
   const tasks = mine.filter((i) => i.type === 'task' && parseTaskPayload(i.payload));
   if (tasks.length) out.push(`${tasks.length} task${tasks.length === 1 ? '' : 's'} noticed`);
   if (entry.mood !== null) out.push(`Feeling ${moodLabel(entry.mood).toLowerCase()} (${entry.mood})`);

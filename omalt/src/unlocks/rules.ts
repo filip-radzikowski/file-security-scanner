@@ -41,7 +41,7 @@ export const UNLOCK_RULES: UnlockRule[] = z.array(unlockRuleSchema).parse([
   {
     moduleType: 'reflect',
     title: 'Reflect',
-    teaser: 'A weekly look back at what you wrote, felt and finished.',
+    teaser: 'A place to write a weekly reflection, shaped to you, and look back at your week.',
     requirement: 'Keep journaling for a week.',
     metric: { kind: 'elapsed', ms: 7 * DAY },
   },
