@@ -16,6 +16,8 @@ export function ListView() {
   const modules = useOmaltStore((s) => s.modules);
   const tasks = useOmaltStore((s) => s.tasks);
   const moods = useOmaltStore((s) => s.moods);
+  const entries = useOmaltStore((s) => s.entries);
+  const recent = useMemo(() => entries.slice(-5).reverse(), [entries]);
   const data = useMemo(() => ({ tasks, moods }), [tasks, moods]);
 
   return (
@@ -82,6 +84,22 @@ export function ListView() {
           );
         })
       )}
+
+      {recent.length > 0 ? (
+        <>
+          <AppText variant="label" tone="soft" style={styles.sectionLabel}>
+            RECENT THOUGHTS
+          </AppText>
+          {recent.map((e) => (
+            <View key={e.id} style={styles.thought} accessible accessibilityLabel={`Your entry: ${e.text}`}>
+              <AppText variant="body">{e.text}</AppText>
+              <AppText variant="small" tone="soft">
+                {format(e.createdAt, 'd MMM \u00B7 HH:mm')}
+              </AppText>
+            </View>
+          ))}
+        </>
+      ) : null}
     </ScrollView>
   );
 }
@@ -116,4 +134,12 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   rowText: { flex: 1 },
+  thought: {
+    padding: spacing.lg,
+    gap: 2,
+    borderRadius: radius.md,
+    backgroundColor: colors.sandSoft,
+    borderWidth: hairlineWidth,
+    borderColor: colors.hairline,
+  },
 });

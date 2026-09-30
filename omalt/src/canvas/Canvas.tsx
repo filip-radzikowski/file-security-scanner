@@ -5,7 +5,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   cancelAnimation,
-  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withDecay,
@@ -14,43 +13,38 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { AppText } from '../components/AppText';
-import { Composer } from '../components/Composer';
-import { SuggestionPrompt } from '../components/SuggestionPrompt';
-import type { ModuleData } from '../modules/types';
 import { useOmaltStore } from '../store/useOmaltStore';
 import { colors, hairlineWidth, hitTarget, radius, shadows, spacing } from '../theme';
-import { CanvasCard } from './CanvasCard';
 import { MiniMap } from './MiniMap';
-import { Trail } from './Trail';
-import {
-  CARD_H,
-  CARD_W,
-  CENTER,
-  COMPOSER_H,
-  COMPOSER_W,
-  CULL_CELL,
-  CULL_MARGIN,
-  HEADER_H,
-  WORLD_SIZE,
-} from './constants';
-import { Rect, cardRect, intersects, trailRect } from './layout';
+import { WorldContent } from './WorldContent';
+import { CARD_H, CARD_W, CENTER, COMPOSER_H, WORLD_SIZE } from './constants';
 
 function clamp(v: number, lo: number, hi: number): number {
   'worklet';
   return Math.min(hi, Math.max(lo, v));
 }
 
-const CELL_STRIDE = 1000;
+const MAX_FLICK = 5000;
+/** Closer to 1 glides longer. 0.9975 is close to native iOS scroll deceleration. */
+const DECELERATION = 0.9975;
+
+/**
+ * Turns the release velocity (pt/s) into the glide's starting velocity. Harder flicks get a
+ * small extra boost so they travel noticeably further, and the cap keeps them controllable.
+ */
+function flickVelocity(v: number): number {
+  'worklet';
+  const boost = 1 + Math.min(Math.abs(v) / 10000, 0.3);
+  return clamp(v * boost, -MAX_FLICK, MAX_FLICK);
+}
+
 
 export function Canvas() {
   const insets = useSafeAreaInsets();
   const win = useWindowDimensions();
 
   const modules = useOmaltStore((s) => s.modules);
-  const tasks = useOmaltStore((s) => s.tasks);
-  const moods = useOmaltStore((s) => s.moods);
   const savePanCenter = useOmaltStore((s) => s.savePanCenter);
-  const data: ModuleData = useMemo(() => ({ tasks, moods }), [tasks, moods]);
 
   // Viewport size. Shared values feed the UI-thread gesture code; state feeds culling.
   const viewW = useSharedValue(win.width);
@@ -70,45 +64,11 @@ export function Canvas() {
     savePanCenter(Math.round(viewW.value / 2 - tx.value), Math.round(viewH.value / 2 - ty.value));
   }, [savePanCenter, viewW, viewH, tx, ty]);
 
-  // ---- culling: re-render the visible set only when the viewport crosses a grid cell ----
-  const [cellKey, setCellKey] = useState(() => {
-    const cx = Math.floor(-tx.value / CULL_CELL);
-    const cy = Math.floor(-ty.value / CULL_CELL);
-    return cx * CELL_STRIDE + cy;
-  });
-  useAnimatedReaction(
-    () => Math.floor(-tx.value / CULL_CELL) * CELL_STRIDE + Math.floor(-(ty.value - lift.value) / CULL_CELL),
-    (key, prev) => {
-      if (key !== prev) scheduleOnRN(setCellKey, key);
-    },
-  );
-
-  const viewRect: Rect = useMemo(() => {
-    const cx = Math.floor(cellKey / CELL_STRIDE);
-    const cy = cellKey - cx * CELL_STRIDE;
-    return {
-      left: cx * CULL_CELL - CULL_MARGIN,
-      top: cy * CULL_CELL - CULL_MARGIN,
-      right: (cx + 1) * CULL_CELL + size.w + CULL_MARGIN,
-      bottom: (cy + 1) * CULL_CELL + size.h + CULL_MARGIN,
-    };
-  }, [cellKey, size]);
-
-  const visible = useMemo(
-    () =>
-      modules.map((m) => ({
-        module: m,
-        showCard: intersects(cardRect(m), viewRect),
-        showTrail: intersects(trailRect(m), viewRect),
-      })),
-    [modules, viewRect],
-  );
-
   // ---- pan with momentum, clamped to the world ----
   const pan = useMemo(
     () =>
       Gesture.Pan()
-        .minDistance(8)
+        .minDistance(6)
         .onBegin(() => {
           cancelAnimation(tx);
           cancelAnimation(ty);
@@ -123,13 +83,13 @@ export function Canvas() {
         })
         .onEnd((e) => {
           tx.value = withDecay(
-            { velocity: e.velocityX, clamp: [viewW.value - WORLD_SIZE, 0], deceleration: 0.997 },
+            { velocity: flickVelocity(e.velocityX), clamp: [viewW.value - WORLD_SIZE, 0], deceleration: DECELERATION },
             (finished) => {
               if (finished) scheduleOnRN(persist);
             },
           );
           ty.value = withDecay(
-            { velocity: e.velocityY, clamp: [viewH.value - WORLD_SIZE, 0], deceleration: 0.997 },
+            { velocity: flickVelocity(e.velocityY), clamp: [viewH.value - WORLD_SIZE, 0], deceleration: DECELERATION },
             (finished) => {
               if (finished) scheduleOnRN(persist);
             },
@@ -222,46 +182,16 @@ export function Canvas() {
     >
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.world, worldStyle]}>
-          {/* Tapping empty canvas dismisses the keyboard. Sits under everything else. */}
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={Keyboard.dismiss}
-            accessible={false}
-            importantForAccessibility="no"
+          <WorldContent
+            tx={tx}
+            ty={ty}
+            lift={lift}
+            width={size.w}
+            height={size.h}
+            onPressIn={handlePressIn}
+            onOpen={handleOpen}
+            onAccepted={reveal}
           />
-
-          {visible.map(({ module, showTrail }) =>
-            showTrail ? <Trail key={`trail-${module.id}`} x={module.x} y={module.y} /> : null,
-          )}
-
-          <View style={styles.header} pointerEvents="none">
-            <AppText variant="wordmark" accessibilityRole="header">
-              Omalt
-            </AppText>
-            <AppText variant="small" tone="soft">
-              Start blank. Become yours.
-            </AppText>
-          </View>
-
-          <View style={styles.composer}>
-            <Composer height={COMPOSER_H} />
-          </View>
-
-          <View style={styles.suggestion}>
-            <SuggestionPrompt onAccepted={reveal} capFontScale />
-          </View>
-
-          {visible.map(({ module, showCard }) =>
-            showCard ? (
-              <CanvasCard
-                key={module.id}
-                module={module}
-                data={data}
-                onPressIn={handlePressIn}
-                onOpen={handleOpen}
-              />
-            ) : null,
-          )}
         </Animated.View>
       </GestureDetector>
 
@@ -301,27 +231,6 @@ export function Canvas() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background, overflow: 'hidden' },
   world: { position: 'absolute', left: 0, top: 0, width: WORLD_SIZE, height: WORLD_SIZE },
-  header: {
-    position: 'absolute',
-    left: CENTER - COMPOSER_W / 2,
-    top: CENTER - COMPOSER_H / 2 - HEADER_H,
-    width: COMPOSER_W,
-    height: HEADER_H - 16,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  composer: {
-    position: 'absolute',
-    left: CENTER - COMPOSER_W / 2,
-    top: CENTER - COMPOSER_H / 2,
-    width: COMPOSER_W,
-  },
-  suggestion: {
-    position: 'absolute',
-    left: CENTER - COMPOSER_W / 2,
-    top: CENTER + COMPOSER_H / 2 + 14,
-    width: COMPOSER_W,
-  },
   settings: { position: 'absolute', right: spacing.lg },
   minimap: { position: 'absolute', left: spacing.lg },
   recentre: { position: 'absolute', right: spacing.lg },

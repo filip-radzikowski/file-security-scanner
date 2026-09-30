@@ -67,8 +67,11 @@ Create `src/modules/<type>/` with `<Type>Card.tsx`, `<Type>Dashboard.tsx`, `sche
 
 - **World**: 6000 x 6000 pt, centred on the text box (3000, 3000). Card `x`/`y` are world-space card centres stored in the `modules` table.
 - **Spawning**: new cards walk an Archimedean spiral out from the centre and take the first slot that clears the text-box cluster and every existing card.
-- **Pan**: `Gesture.Pan` (8 pt activation distance) with `withDecay`, clamped to the world. Cards are `Pressable`s, so a short tap opens a card, a drag activates the pan and cancels the press, and a press that coincides with canvas movement is ignored.
-- **Culling**: the viewport is quantised to a 160 pt grid; React re-renders the visible card and trail set only when the viewport crosses a cell, with a 320 pt margin.
+- **Pan**: `Gesture.Pan` (6 pt activation distance) with `withDecay` (native-like deceleration; harder flicks get a small velocity boost, capped), clamped to the world. Viewport culling lives in its own `WorldContent` subtree so re-renders never touch the gesture layer. Cards are `Pressable`s, so a short tap opens a card, a drag activates the pan and cancels the press, and a press that coincides with canvas movement is ignored.
+- **Culling**: the viewport is quantised to a 200 pt grid; the visible card, trail and ambient-dot set is recomputed only when the viewport crosses a cell, with a 400 pt margin.
+- **Ambient dots**: a deterministic scatter of sand and sage dots covers the whole world (generated per grid cell, nothing stored), so cards, trails and notes sit in one connected field.
+- **Thought notes**: your last five entries float up from the wordmark as small notes joined by a dotted chain, newest closest and fading with age. Tap one to expand it. The plain list view shows the same entries under "Recent thoughts".
+- **Growth hint**: under the text box, whenever there is no suggestion to act on, the canvas says "Keep writing, and Omalt will suggest what to add here."
 - **Persistence**: entries, extracted items, modules and suggestions are in SQLite (`omalt.db`). A small extra `kv` table stores the last pan position (as the world point at the viewport centre) and settings.
 - **Suggestions**: one per module type. "Not now" snoozes it until enough new mentions accumulate (3 more for tasks, 5 more for mood).
 - **Accessibility**: labelled controls, 44 pt touch targets, Dynamic Type honoured (capped on fixed-size canvas cards), text-safe sage/sand shades for contrast, and the plain list view.

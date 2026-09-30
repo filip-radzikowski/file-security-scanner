@@ -6,21 +6,38 @@ export const COMPOSER_W = 340;
 export const COMPOSER_H = 132;
 /** Room above the composer for the wordmark and tagline. */
 export const HEADER_H = 120;
-/** Room below the composer for the suggestion card. */
+/** Room below the composer for the suggestion card / growth hint. */
 export const SUGGESTION_H = 150;
 
 export const CARD_W = 168;
 export const CARD_H = 124;
 
-/** Area around the centre that new cards and trails must keep clear. */
+/**
+ * "Thought notes": the latest entries drift up from the wordmark in a staggered chain,
+ * newest closest. Offsets are from the world centre to each note's centre.
+ */
+export const NOTE_W = 190;
+export const NOTE_H = 76;
+export const NOTE_SLOTS = [
+  { x: 0, y: -250 },
+  { x: -88, y: -340 },
+  { x: 88, y: -430 },
+  { x: -88, y: -520 },
+  { x: 88, y: -610 },
+] as const;
+export const NOTE_OPACITY = [1, 0.86, 0.72, 0.6, 0.5] as const;
+/** Where the dotted chain to the notes starts (just above the wordmark). */
+export const NOTE_CHAIN_START = { x: CENTER, y: CENTER - 165 };
+
+/** Area around the centre that new cards, trails and ambient dots must keep clear. */
 export const RESERVED = {
   left: CENTER - COMPOSER_W / 2 - 24,
   right: CENTER + COMPOSER_W / 2 + 24,
-  top: CENTER - COMPOSER_H / 2 - HEADER_H,
+  top: CENTER + NOTE_SLOTS[NOTE_SLOTS.length - 1].y - NOTE_H / 2 - 30,
   bottom: CENTER + COMPOSER_H / 2 + SUGGESTION_H,
 };
 
 /** How far outside the viewport (in points) content is still rendered. */
-export const CULL_MARGIN = 320;
+export const CULL_MARGIN = 400;
 /** Granularity of the viewport-cell key used to throttle culling updates. */
-export const CULL_CELL = 160;
+export const CULL_CELL = 200;

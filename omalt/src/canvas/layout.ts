@@ -83,23 +83,31 @@ export function trailRect(p: Point): Rect {
 
 const DOT_SPACING = 20;
 
-/** Points for the faint dotted trail from the centre cluster to a card. */
-export function trailDots(p: Point): Point[] {
-  const dx = p.x - CENTER;
-  const dy = p.y - CENTER;
+/** Evenly spaced dots from a to b, leaving out any that fall inside a skip rect. */
+export function dotsBetween(a: Point, b: Point, skip: Rect[], spacing: number = DOT_SPACING): Point[] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
   const length = Math.hypot(dx, dy);
   if (length === 0) return [];
   const ux = dx / length;
   const uy = dy / length;
-  const card = cardRect(p);
   const dots: Point[] = [];
-  for (let d = DOT_SPACING; d < length; d += DOT_SPACING) {
-    const dot = { x: CENTER + ux * d, y: CENTER + uy * d };
-    const inReserved =
-      dot.x > RESERVED.left && dot.x < RESERVED.right && dot.y > RESERVED.top && dot.y < RESERVED.bottom;
-    const inCard =
-      dot.x > card.left - 8 && dot.x < card.right + 8 && dot.y > card.top - 8 && dot.y < card.bottom + 8;
-    if (!inReserved && !inCard) dots.push(dot);
+  for (let d = spacing; d < length; d += spacing) {
+    const dot = { x: a.x + ux * d, y: a.y + uy * d };
+    const hidden = skip.some((r) => dot.x > r.left && dot.x < r.right && dot.y > r.top && dot.y < r.bottom);
+    if (!hidden) dots.push(dot);
   }
   return dots;
+}
+
+/** Points for the faint dotted trail from the centre cluster to a card. */
+export function trailDots(p: Point): Point[] {
+  const card = cardRect(p);
+  const paddedCard: Rect = {
+    left: card.left - 8,
+    right: card.right + 8,
+    top: card.top - 8,
+    bottom: card.bottom + 8,
+  };
+  return dotsBetween({ x: CENTER, y: CENTER }, p, [RESERVED, paddedCard]);
 }

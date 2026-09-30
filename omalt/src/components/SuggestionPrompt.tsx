@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { ReactNode, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useOmaltStore } from '../store/useOmaltStore';
@@ -11,17 +11,19 @@ interface Props {
   onAccepted?: (moduleId: string) => void;
   /** Canvas cards are fixed-size, so text scaling is capped there. */
   capFontScale?: boolean;
+  /** Shown in place of the card when nothing is pending. */
+  emptyHint?: ReactNode;
 }
 
 /** Shows the oldest pending suggestion with Add / Not now. */
-export function SuggestionPrompt({ onAccepted, capFontScale }: Props) {
+export function SuggestionPrompt({ onAccepted, capFontScale, emptyHint }: Props) {
   const suggestions = useOmaltStore((s) => s.suggestions);
   const accept = useOmaltStore((s) => s.acceptSuggestion);
   const dismiss = useOmaltStore((s) => s.dismissSuggestion);
   const pending = useMemo(() => suggestions.find((s) => s.status === 'pending'), [suggestions]);
   const cap = capFontScale ? fixedSurfaceFontScale : undefined;
 
-  if (!pending) return null;
+  if (!pending) return <>{emptyHint ?? null}</>;
 
   return (
     <Animated.View

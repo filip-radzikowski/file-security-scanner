@@ -16,6 +16,7 @@ export const colors = {
   inkFaint: '#9A958B', // decorative only
   hairline: '#E9E4DA',
   trail: '#B9B2A2',
+  ambient: '#D8CFBF', // scattered background dots
   overlay: 'rgba(250, 248, 245, 0.92)',
   shadow: '#3B3527',
   danger: '#9A4A3C',
