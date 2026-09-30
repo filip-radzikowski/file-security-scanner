@@ -16,6 +16,8 @@ export default function Settings() {
   const clockOffsetMs = useOmaltStore((s) => s.clockOffsetMs);
   const skipAhead = useOmaltStore((s) => s.skipAhead);
   const resetClock = useOmaltStore((s) => s.resetClock);
+  const smoothMotion = useOmaltStore((s) => s.smoothMotion);
+  const setSmoothMotion = useOmaltStore((s) => s.setSmoothMotion);
   const nudgesEnabled = useOmaltStore((s) => s.nudgesEnabled);
   const setNudgesEnabled = useOmaltStore((s) => s.setNudgesEnabled);
   const showNudge = useOmaltStore((s) => s.showNudge);
@@ -43,6 +45,26 @@ export default function Settings() {
             trackColor={{ false: colors.sand, true: colors.sage }}
             thumbColor={colors.ivory}
             accessibilityLabel="Plain list view"
+          />
+        </View>
+      </Panel>
+
+      <Panel>
+        <View style={styles.switchRow}>
+          <View style={styles.switchText}>
+            <AppText variant="heading">Smooth canvas motion</AppText>
+            <AppText variant="small" tone="soft">
+              Keeps the canvas gliding after a swipe and flying back on Recentre. If your phone has Reduce
+              Motion turned on, these would otherwise snap instantly. Turn this off to follow your phone's
+              setting exactly.
+            </AppText>
+          </View>
+          <Switch
+            value={smoothMotion}
+            onValueChange={setSmoothMotion}
+            trackColor={{ false: colors.sand, true: colors.sage }}
+            thumbColor={colors.ivory}
+            accessibilityLabel="Smooth canvas motion"
           />
         </View>
       </Panel>

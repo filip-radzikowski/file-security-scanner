@@ -51,7 +51,6 @@ const Note = memo(function Note({ entry, index }: { entry: Entry; index: number 
         {
           left: CENTER + slot.x - NOTE_W / 2,
           top: CENTER + slot.y - NOTE_H / 2,
-          opacity: NOTE_OPACITY[index],
         },
       ]}
     >
@@ -60,7 +59,8 @@ const Note = memo(function Note({ entry, index }: { entry: Entry; index: number 
         accessibilityRole="button"
         accessibilityLabel={`Your entry: ${entry.text}`}
         accessibilityHint="Opens this thought"
-        style={({ pressed }) => [styles.note, pressed && styles.pressed]}
+        // Opacity lives here, not on the animated wrapper, which fades in via `entering`.
+        style={({ pressed }) => [styles.note, { opacity: NOTE_OPACITY[index] }, pressed && styles.pressed]}
       >
         <AppText variant="small" numberOfLines={2} maxFontSizeMultiplier={fixedSurfaceFontScale}>
           {entry.text}

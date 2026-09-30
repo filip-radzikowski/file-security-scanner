@@ -37,6 +37,7 @@ import { reconcileSuggestions } from './suggestions';
 
 const KV_LIST_VIEW = 'settings.listView';
 const KV_PAN_CENTER = 'canvas.panCenter';
+const KV_SMOOTH_MOTION = 'settings.smoothMotion';
 const KV_CLOCK_OFFSET = 'debug.clockOffsetMs';
 const KV_NUDGES_ENABLED = 'settings.nudges';
 const KV_NUDGE_LAST = 'nudge.last';
@@ -87,6 +88,8 @@ interface OmaltState {
   moods: MoodPoint[];
 
   listView: boolean;
+  /** Keep canvas gliding and flying even if the phone's Reduce Motion is on. Default true. */
+  smoothMotion: boolean;
   /** World point that sits at the centre of the viewport. */
   panCenter: PanCenter;
   /** Testing only: shifts "now" forward so time-based unlocks can be previewed. */
@@ -120,6 +123,7 @@ interface OmaltState {
   logMood(value: number): Promise<void>;
   markModuleUsed(id: string): Promise<void>;
   setListView(value: boolean): Promise<void>;
+  setSmoothMotion(value: boolean): Promise<void>;
   savePanCenter(x: number, y: number): void;
   syncUnlocks(): Promise<void>;
   dismissUnlockNotice(): void;
@@ -232,6 +236,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     tasks: [],
     moods: [],
     listView: false,
+    smoothMotion: true,
     panCenter: DEFAULT_PAN,
     clockOffsetMs: 0,
     unlockNotice: null,
@@ -241,7 +246,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
 
     async init() {
       try {
-        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw] = await Promise.all([
+        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw, smoothRaw] = await Promise.all([
           repo.listEntries(),
           repo.listExtractedItems(),
           repo.listModules(),
@@ -250,6 +255,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
           repo.getKv(KV_PAN_CENTER),
           repo.getKv(KV_CLOCK_OFFSET),
           repo.getKv(KV_NUDGES_ENABLED),
+          repo.getKv(KV_SMOOTH_MOTION),
         ]);
 
         let listView = listViewRaw === '1';
@@ -283,6 +289,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
           panCenter,
           clockOffsetMs: Number.isFinite(offset) ? offset : 0,
           nudgesEnabled: nudgesRaw === '1',
+          smoothMotion: smoothRaw !== '0',
           ready: true,
         });
         enqueueUnlockSync();
@@ -561,6 +568,11 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       set((s) => ({ modules: s.modules.map((m) => (m.id === id ? { ...m, lastUsedAt: at } : m)) }));
     },
 
+    async setSmoothMotion(value) {
+      set({ smoothMotion: value });
+      await repo.setKv(KV_SMOOTH_MOTION, value ? '1' : '0');
+    },
+
     async setListView(value) {
       set({ listView: value });
       await repo.setKv(KV_LIST_VIEW, value ? '1' : '0');
@@ -602,6 +614,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         tasks: [],
         moods: [],
         listView: false,
+        smoothMotion: true,
         panCenter: DEFAULT_PAN,
         clockOffsetMs: 0,
         unlockNotice: null,

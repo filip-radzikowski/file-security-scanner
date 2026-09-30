@@ -4,6 +4,7 @@ import { Keyboard, Platform, Pressable, StyleSheet, View, useWindowDimensions } 
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
+  ReduceMotion,
   cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
@@ -30,8 +31,12 @@ const DECELERATION = 0.998;
 
 /** Flight timing: longer trips take longer, with a slow start and a soft landing. */
 const FLIGHT_EASING = Easing.bezier(0.45, 0, 0.2, 1);
-function flight(distance: number, base: number, perPoint: number, max: number) {
-  return { duration: Math.min(max, base + distance * perPoint), easing: FLIGHT_EASING };
+function flight(distance: number, base: number, perPoint: number, max: number, smooth: boolean) {
+  return {
+    duration: Math.min(max, base + distance * perPoint),
+    easing: FLIGHT_EASING,
+    reduceMotion: smooth ? ReduceMotion.Never : ReduceMotion.System,
+  };
 }
 
 /**
@@ -51,6 +56,7 @@ export function Canvas() {
 
   const modules = useOmaltStore((s) => s.modules);
   const savePanCenter = useOmaltStore((s) => s.savePanCenter);
+  const smooth = useOmaltStore((s) => s.smoothMotion);
 
   // Viewport size. Shared values feed the UI-thread gesture code; state feeds culling.
   const viewW = useSharedValue(win.width);
@@ -61,6 +67,13 @@ export function Canvas() {
   const initial = useRef(useOmaltStore.getState().panCenter).current;
   const tx = useSharedValue(clamp(win.width / 2 - initial.x, win.width - WORLD_SIZE, 0));
   const ty = useSharedValue(clamp(win.height / 2 - initial.y, win.height - WORLD_SIZE, 0));
+  // Reanimated skips animations when the phone's Reduce Motion is on. The pan glide is direct
+  // manipulation and the recentre flight is core to the canvas, so they opt out unless the user
+  // turns "Smooth canvas motion" off in Settings.
+  const smoothSv = useSharedValue(smooth);
+  useEffect(() => {
+    smoothSv.value = smooth;
+  }, [smooth, smoothSv]);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   /** Temporary upward shift that keeps the text box above the keyboard. */
@@ -91,19 +104,29 @@ export function Canvas() {
         })
         .onEnd((e) => {
           tx.value = withDecay(
-            { velocity: flickVelocity(e.velocityX), clamp: [viewW.value - WORLD_SIZE, 0], deceleration: DECELERATION },
+            {
+              velocity: flickVelocity(e.velocityX),
+              clamp: [viewW.value - WORLD_SIZE, 0],
+              deceleration: DECELERATION,
+              reduceMotion: smoothSv.value ? ReduceMotion.Never : ReduceMotion.System,
+            },
             (finished) => {
               if (finished) scheduleOnRN(persist);
             },
           );
           ty.value = withDecay(
-            { velocity: flickVelocity(e.velocityY), clamp: [viewH.value - WORLD_SIZE, 0], deceleration: DECELERATION },
+            {
+              velocity: flickVelocity(e.velocityY),
+              clamp: [viewH.value - WORLD_SIZE, 0],
+              deceleration: DECELERATION,
+              reduceMotion: smoothSv.value ? ReduceMotion.Never : ReduceMotion.System,
+            },
             (finished) => {
               if (finished) scheduleOnRN(persist);
             },
           );
         }),
-    [tx, ty, startX, startY, viewW, viewH, persist, dismissKeyboard],
+    [tx, ty, startX, startY, viewW, viewH, persist, dismissKeyboard, smoothSv],
   );
 
   const worldStyle = useAnimatedStyle(() => ({
@@ -149,12 +172,12 @@ export function Canvas() {
     const targetX = viewW.value / 2 - CENTER;
     const targetY = viewH.value / 2 - CENTER;
     // Both axes share one duration so the canvas travels in a straight line.
-    const config = flight(Math.hypot(targetX - tx.value, targetY - ty.value), 700, 0.4, 1800);
+    const config = flight(Math.hypot(targetX - tx.value, targetY - ty.value), 700, 0.4, 1800, smooth);
     tx.value = withTiming(targetX, config);
     ty.value = withTiming(targetY, config, (finished) => {
       if (finished) scheduleOnRN(persist);
     });
-  }, [tx, ty, viewW, viewH, persist]);
+  }, [tx, ty, viewW, viewH, persist, smooth]);
 
   /** Pans just far enough to bring a newly added card fully into view. */
   const reveal = useCallback(
@@ -173,13 +196,13 @@ export function Canvas() {
       if (sy < top) dy = top - sy;
       else if (sy > bottom) dy = bottom - sy;
       if (dx === 0 && dy === 0) return;
-      const config = flight(Math.hypot(dx, dy), 600, 0.35, 1400);
+      const config = flight(Math.hypot(dx, dy), 600, 0.35, 1400, smooth);
       tx.value = withTiming(clamp(tx.value + dx, viewW.value - WORLD_SIZE, 0), config);
       ty.value = withTiming(clamp(ty.value + dy, viewH.value - WORLD_SIZE, 0), config, (finished) => {
         if (finished) scheduleOnRN(persist);
       });
     },
-    [tx, ty, viewW, viewH, insets.top, insets.bottom, persist],
+    [tx, ty, viewW, viewH, insets.top, insets.bottom, persist, smooth],
   );
 
   return (
