@@ -24,9 +24,9 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
-const MAX_FLICK = 5000;
-/** Closer to 1 glides longer. 0.9975 is close to native iOS scroll deceleration. */
-const DECELERATION = 0.9975;
+const MAX_FLICK = 8000;
+/** Closer to 1 glides longer. 0.998 is native iOS scroll deceleration; it keeps flowing after release. */
+const DECELERATION = 0.998;
 
 /**
  * Turns the release velocity (pt/s) into the glide's starting velocity. Harder flicks get a
@@ -34,7 +34,7 @@ const DECELERATION = 0.9975;
  */
 function flickVelocity(v: number): number {
   'worklet';
-  const boost = 1 + Math.min(Math.abs(v) / 10000, 0.3);
+  const boost = 1 + Math.min(Math.abs(v) / 5000, 0.6);
   return clamp(v * boost, -MAX_FLICK, MAX_FLICK);
 }
 
@@ -65,6 +65,7 @@ export function Canvas() {
   }, [savePanCenter, viewW, viewH, tx, ty]);
 
   // ---- pan with momentum, clamped to the world ----
+  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
   const pan = useMemo(
     () =>
       Gesture.Pan()
@@ -76,6 +77,7 @@ export function Canvas() {
         .onStart(() => {
           startX.value = tx.value;
           startY.value = ty.value;
+          scheduleOnRN(dismissKeyboard);
         })
         .onUpdate((e) => {
           tx.value = clamp(startX.value + e.translationX, viewW.value - WORLD_SIZE, 0);
@@ -95,7 +97,7 @@ export function Canvas() {
             },
           );
         }),
-    [tx, ty, startX, startY, viewW, viewH, persist],
+    [tx, ty, startX, startY, viewW, viewH, persist, dismissKeyboard],
   );
 
   const worldStyle = useAnimatedStyle(() => ({

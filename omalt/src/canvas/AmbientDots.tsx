@@ -1,14 +1,19 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { colors } from '../theme';
 import { ambientDotsIn } from './ambient';
+import { CHUNK } from './constants';
 import { Rect } from './layout';
 
-/** Quiet scatter of dots across the whole canvas, so it feels like one connected field. */
-export const AmbientDots = memo(function AmbientDots({ rect }: { rect: Rect }) {
-  const dots = useMemo(() => ambientDotsIn(rect), [rect]);
+const Chunk = memo(function Chunk({ cx, cy }: { cx: number; cy: number }) {
+  const dots = useMemo(
+    // The far edge is exclusive so neighbouring chunks never generate the same cell twice.
+    () =>
+      ambientDotsIn({ left: cx * CHUNK, right: (cx + 1) * CHUNK - 1, top: cy * CHUNK, bottom: (cy + 1) * CHUNK - 1 }),
+    [cx, cy],
+  );
   return (
-    <View pointerEvents="none" style={styles.layer} importantForAccessibility="no-hide-descendants">
+    <>
       {dots.map((d) => (
         <View
           key={d.key}
@@ -24,6 +29,27 @@ export const AmbientDots = memo(function AmbientDots({ rect }: { rect: Rect }) {
           }}
         />
       ))}
+    </>
+  );
+});
+
+/**
+ * Quiet scatter of dots across the whole canvas, so it feels like one connected field.
+ * Chunks are only ever added (never unmounted), so panning back over old ground costs nothing.
+ */
+export const AmbientDots = memo(function AmbientDots({ rect }: { rect: Rect }) {
+  const visited = useRef(new Set<string>());
+  for (let cx = Math.floor(rect.left / CHUNK); cx < Math.ceil(rect.right / CHUNK); cx++) {
+    for (let cy = Math.floor(rect.top / CHUNK); cy < Math.ceil(rect.bottom / CHUNK); cy++) {
+      visited.current.add(`${cx}:${cy}`);
+    }
+  }
+  return (
+    <View pointerEvents="none" style={styles.layer} importantForAccessibility="no-hide-descendants">
+      {[...visited.current].map((k) => {
+        const [cx, cy] = k.split(':').map(Number);
+        return <Chunk key={k} cx={cx} cy={cy} />;
+      })}
     </View>
   );
 });

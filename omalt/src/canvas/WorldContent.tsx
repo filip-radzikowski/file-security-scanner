@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from 'react';
-import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SharedValue, useAnimatedReaction } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { AppText } from '../components/AppText';
@@ -16,8 +16,7 @@ import {
   CENTER,
   COMPOSER_H,
   COMPOSER_W,
-  CULL_CELL,
-  CULL_MARGIN,
+  CHUNK,
   HEADER_H,
   NOTE_H,
   NOTE_SLOTS,
@@ -25,7 +24,7 @@ import {
 } from './constants';
 import { Rect, cardRect, intersects, trailRect } from './layout';
 
-const CELL_STRIDE = 1000;
+const CHUNK_STRIDE = 100;
 
 const NOTES_AREA: Rect = {
   left: CENTER - NOTE_W,
@@ -65,28 +64,31 @@ export const WorldContent = memo(function WorldContent({
   const entries = useOmaltStore((s) => s.entries);
   const data: ModuleData = useMemo(() => ({ tasks, moods, entries }), [tasks, moods, entries]);
 
-  const [cellKey, setCellKey] = useState(() => {
-    const cx = Math.floor(-tx.value / CULL_CELL);
-    const cy = Math.floor(-ty.value / CULL_CELL);
-    return cx * CELL_STRIDE + cy;
+  // Which chunk holds the centre of the viewport. Only a change here triggers a re-render.
+  const [chunkKey, setChunkKey] = useState(() => {
+    const cx = Math.floor((-tx.value + width / 2) / CHUNK);
+    const cy = Math.floor((-ty.value + height / 2) / CHUNK);
+    return cx * CHUNK_STRIDE + cy;
   });
   useAnimatedReaction(
-    () => Math.floor(-tx.value / CULL_CELL) * CELL_STRIDE + Math.floor(-(ty.value - lift.value) / CULL_CELL),
+    () =>
+      Math.floor((-tx.value + width / 2) / CHUNK) * CHUNK_STRIDE +
+      Math.floor((-(ty.value - lift.value) + height / 2) / CHUNK),
     (key, prev) => {
-      if (key !== prev) scheduleOnRN(setCellKey, key);
+      if (key !== prev) scheduleOnRN(setChunkKey, key);
     },
   );
 
   const viewRect: Rect = useMemo(() => {
-    const cx = Math.floor(cellKey / CELL_STRIDE);
-    const cy = cellKey - cx * CELL_STRIDE;
+    const cx = Math.floor(chunkKey / CHUNK_STRIDE);
+    const cy = chunkKey - cx * CHUNK_STRIDE;
     return {
-      left: cx * CULL_CELL - CULL_MARGIN,
-      top: cy * CULL_CELL - CULL_MARGIN,
-      right: (cx + 1) * CULL_CELL + width + CULL_MARGIN,
-      bottom: (cy + 1) * CULL_CELL + height + CULL_MARGIN,
+      left: (cx - 1) * CHUNK,
+      top: (cy - 1) * CHUNK,
+      right: (cx + 2) * CHUNK,
+      bottom: (cy + 2) * CHUNK,
     };
-  }, [cellKey, width, height]);
+  }, [chunkKey]);
 
   const visible = useMemo(
     () =>
@@ -102,14 +104,6 @@ export const WorldContent = memo(function WorldContent({
 
   return (
     <>
-      {/* Tapping empty canvas dismisses the keyboard. Sits under everything else. */}
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={Keyboard.dismiss}
-        accessible={false}
-        importantForAccessibility="no"
-      />
-
       <AmbientDots rect={viewRect} />
 
       {visible.map(({ module, showTrail }) =>

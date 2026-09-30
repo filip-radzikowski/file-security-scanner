@@ -37,7 +37,10 @@ export const RESERVED = {
   bottom: CENTER + COMPOSER_H / 2 + SUGGESTION_H,
 };
 
-/** How far outside the viewport (in points) content is still rendered. */
-export const CULL_MARGIN = 400;
-/** Granularity of the viewport-cell key used to throttle culling updates. */
-export const CULL_CELL = 200;
+/**
+ * Culling works in big chunks so React only re-renders when the viewport centre crosses a
+ * chunk boundary (roughly every CHUNK points of travel), never mid-glide. Everything in the
+ * 3x3 chunks around the viewport centre is rendered, which is at least one full chunk of
+ * look-ahead in every direction.
+ */
+export const CHUNK = 900;
