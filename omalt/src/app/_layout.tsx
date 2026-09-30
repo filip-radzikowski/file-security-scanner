@@ -12,6 +12,8 @@ import { AppState, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppText } from '../components/AppText';
+import { CheerBanner } from '../components/CheerBanner';
+import { configureNotificationHandler, listenForNudges } from '../nudges/notifications';
 import { useOmaltStore } from '../store/useOmaltStore';
 import { colors, fonts, spacing } from '../theme';
 
@@ -29,6 +31,9 @@ export default function RootLayout() {
   const error = useOmaltStore((s) => s.error);
   const init = useOmaltStore((s) => s.init);
   const syncUnlocks = useOmaltStore((s) => s.syncUnlocks);
+  const maybeShowNudge = useOmaltStore((s) => s.maybeShowNudge);
+  const showNudge = useOmaltStore((s) => s.showNudge);
+  const refreshNudgeSchedule = useOmaltStore((s) => s.refreshNudgeSchedule);
 
   useEffect(() => {
     init();
@@ -39,13 +44,35 @@ export default function RootLayout() {
     if (!ready) return;
     const timer = setInterval(() => syncUnlocks(), 60000);
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') syncUnlocks();
+      if (state === 'active') {
+        syncUnlocks();
+        maybeShowNudge();
+        refreshNudgeSchedule();
+      }
     });
     return () => {
       clearInterval(timer);
       sub.remove();
     };
-  }, [ready, syncUnlocks]);
+  }, [ready, syncUnlocks, maybeShowNudge, refreshNudgeSchedule]);
+
+  // Nudges: offer one when the app opens, keep the week's notifications topped up,
+  // and react to nudge notifications (received while open, or tapped).
+  useEffect(() => {
+    if (!ready) return;
+    try {
+      configureNotificationHandler();
+    } catch {
+      // Notifications are optional.
+    }
+    maybeShowNudge();
+    refreshNudgeSchedule();
+    try {
+      return listenForNudges(showNudge);
+    } catch {
+      return undefined;
+    }
+  }, [ready, maybeShowNudge, refreshNudgeSchedule, showNudge]);
 
   const done = (fontsLoaded || !!fontError) && ready;
   useEffect(() => {
@@ -69,6 +96,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
+        <CheerBanner />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.background },
@@ -80,6 +108,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="module/[id]" options={{ title: '', headerBackTitle: 'Canvas' }} />
+          <Stack.Screen name="thought/[id]" options={{ title: 'Thought', headerBackTitle: 'Back' }} />
           <Stack.Screen name="settings" options={{ title: 'Settings', headerBackTitle: 'Back' }} />
         </Stack>
       </SafeAreaProvider>

@@ -3,16 +3,19 @@ import { StyleSheet, View } from 'react-native';
 import { useOmaltStore } from '../store/useOmaltStore';
 import { colors, fixedSurfaceFontScale, hairlineWidth, radius, shadows, spacing } from '../theme';
 import { AppText } from './AppText';
+import { NudgeCard } from './NudgeCard';
 import { PillButton } from './PillButton';
 
 /**
  * Sits under the text box whenever there is no suggestion to act on: announces a fresh
- * unlock, or else nudges the user to keep writing.
+ * unlock, offers a quick check-in, or else nudges the user to keep writing.
+ * With `bare`, it renders only the unlock notice or check-in (used by the list view).
  */
-export function GrowthHint() {
+export function GrowthHint({ bare }: { bare?: boolean }) {
   const hasModules = useOmaltStore((s) => s.modules.some((m) => m.status !== 'locked'));
   const notice = useOmaltStore((s) => s.unlockNotice);
   const dismiss = useOmaltStore((s) => s.dismissUnlockNotice);
+  const hasNudge = useOmaltStore((s) => s.activeNudge !== null);
 
   if (notice) {
     return (
@@ -34,6 +37,9 @@ export function GrowthHint() {
       </View>
     );
   }
+
+  if (hasNudge) return <NudgeCard capFontScale={!bare} />;
+  if (bare) return null;
 
   return (
     <AppText variant="small" tone="soft" style={styles.hint} maxFontSizeMultiplier={fixedSurfaceFontScale}>

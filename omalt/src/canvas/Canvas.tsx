@@ -17,7 +17,7 @@ import { useOmaltStore } from '../store/useOmaltStore';
 import { colors, hairlineWidth, hitTarget, radius, shadows, spacing } from '../theme';
 import { MiniMap } from './MiniMap';
 import { WorldContent } from './WorldContent';
-import { CARD_H, CARD_W, CENTER, COMPOSER_H, WORLD_SIZE } from './constants';
+import { CARD_H, CARD_W, CENTER, COMPOSER_H, SUGGESTION_H, WORLD_SIZE } from './constants';
 
 function clamp(v: number, lo: number, hi: number): number {
   'worklet';
@@ -116,7 +116,8 @@ export function Canvas() {
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     const show = Keyboard.addListener(showEvent, (e) => {
       const keyboardTop = viewH.value - e.endCoordinates.height;
-      const composerBottom = ty.value + CENTER + COMPOSER_H / 2 + 24;
+      // Keep the text box and the card underneath it (suggestion or check-in) above the keyboard.
+      const composerBottom = ty.value + CENTER + COMPOSER_H / 2 + 14 + SUGGESTION_H;
       lift.value = withTiming(Math.max(0, composerBottom - keyboardTop), { duration: 250 });
     });
     const hide = Keyboard.addListener(hideEvent, () => {

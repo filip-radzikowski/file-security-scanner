@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
-import { memo, useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { AppText } from '../components/AppText';
@@ -38,7 +39,6 @@ function chainDots(count: number): Point[] {
 }
 
 const Note = memo(function Note({ entry, index }: { entry: Entry; index: number }) {
-  const [open, setOpen] = useState(false);
   const slot = NOTE_SLOTS[index];
   // Only animate a note that was just written, not one scrolling back into view.
   const fresh = useMemo(() => Math.abs(Date.now() - entry.createdAt) < 4000, [entry.createdAt]);
@@ -51,29 +51,28 @@ const Note = memo(function Note({ entry, index }: { entry: Entry; index: number 
         {
           left: CENTER + slot.x - NOTE_W / 2,
           top: CENTER + slot.y - NOTE_H / 2,
-          opacity: open ? 1 : NOTE_OPACITY[index],
-          zIndex: open ? 10 : 0,
+          opacity: NOTE_OPACITY[index],
         },
       ]}
     >
       <Pressable
-        onPress={() => setOpen((o) => !o)}
+        onPress={() => router.push({ pathname: '/thought/[id]', params: { id: entry.id } })}
         accessibilityRole="button"
         accessibilityLabel={`Your entry: ${entry.text}`}
-        accessibilityHint={open ? 'Collapses this note' : 'Shows the whole note'}
-        accessibilityState={{ expanded: open }}
+        accessibilityHint="Opens this thought"
         style={({ pressed }) => [styles.note, pressed && styles.pressed]}
       >
-        <AppText
-          variant="small"
-          numberOfLines={open ? undefined : 2}
-          maxFontSizeMultiplier={fixedSurfaceFontScale}
-        >
+        <AppText variant="small" numberOfLines={2} maxFontSizeMultiplier={fixedSurfaceFontScale}>
           {entry.text}
         </AppText>
-        <AppText variant="label" tone="soft" maxFontSizeMultiplier={fixedSurfaceFontScale}>
-          {format(entry.createdAt, 'd MMM · HH:mm')}
-        </AppText>
+        <View style={styles.foot}>
+          <AppText variant="label" tone="soft" maxFontSizeMultiplier={fixedSurfaceFontScale}>
+            {format(entry.createdAt, 'd MMM \u00B7 HH:mm')}
+          </AppText>
+          <AppText variant="label" tone="sage" maxFontSizeMultiplier={fixedSurfaceFontScale}>
+            Open {'\u203A'}
+          </AppText>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -121,5 +120,6 @@ const styles = StyleSheet.create({
     borderWidth: hairlineWidth,
     borderColor: colors.hairline,
   },
+  foot: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   pressed: { backgroundColor: colors.sand },
 });

@@ -36,6 +36,7 @@ const config: ExpoConfig = {
       },
     ],
     'expo-sqlite',
+    ['expo-notifications', { color: '#8FA58A' }],
   ],
 };
 

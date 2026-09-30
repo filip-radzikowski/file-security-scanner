@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { moodLabel } from '../modules/mood/schema';
 import { useOmaltStore } from '../store/useOmaltStore';
 import { colors, fixedSurfaceFontScale, fonts, hairlineWidth, radius, shadows, spacing } from '../theme';
 import { AppText } from './AppText';
@@ -30,16 +29,13 @@ export function Composer({ height }: Props) {
     if (!text.trim() || busy) return;
     setBusy(true);
     try {
-      const result = await addEntry(text);
+      const result = await addEntry(text, { announce: false });
       if (result) {
         setText('');
         Keyboard.dismiss();
-        const parts = ['Saved.'];
-        if (result.taskCount > 0) parts.push(`${result.taskCount} task${result.taskCount === 1 ? '' : 's'} noticed.`);
-        if (result.mood !== null) parts.push(`Feeling ${moodLabel(result.mood).toLowerCase()}.`);
-        setNote(parts.join(' '));
+        setNote(result.message);
         if (timer.current) clearTimeout(timer.current);
-        timer.current = setTimeout(() => setNote(''), 4000);
+        timer.current = setTimeout(() => setNote(''), 6000);
       }
     } catch {
       setNote('Could not save that. Please try again.');
@@ -68,7 +64,7 @@ export function Composer({ height }: Props) {
         <AppText
           variant="small"
           tone="soft"
-          numberOfLines={1}
+          numberOfLines={2}
           style={styles.note}
           maxFontSizeMultiplier={fixedSurfaceFontScale}
           accessibilityLiveRegion="polite"

@@ -1,6 +1,6 @@
 /** Lightweight module metadata with no UI imports, safe for the store and DB layers. */
 
-export const MODULE_TYPES = ['todo', 'mood', 'reflect', 'streak'] as const;
+export const MODULE_TYPES = ['todo', 'mood', 'reflect', 'streak', 'weather', 'sleep', 'steps'] as const;
 export type KnownModuleType = (typeof MODULE_TYPES)[number];
 
 export const MODULE_TITLES: Record<KnownModuleType, string> = {
@@ -8,6 +8,9 @@ export const MODULE_TITLES: Record<KnownModuleType, string> = {
   mood: 'Mood',
   reflect: 'Reflect',
   streak: 'Streak',
+  weather: 'Weather',
+  sleep: 'Sleep',
+  steps: 'Steps',
 };
 
 export function isKnownModuleType(type: string): type is KnownModuleType {

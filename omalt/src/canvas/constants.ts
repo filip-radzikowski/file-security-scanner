@@ -7,7 +7,7 @@ export const COMPOSER_H = 132;
 /** Room above the composer for the wordmark and tagline. */
 export const HEADER_H = 120;
 /** Room below the composer for the suggestion card / growth hint. */
-export const SUGGESTION_H = 150;
+export const SUGGESTION_H = 200;
 
 export const CARD_W = 168;
 export const CARD_H = 124;
@@ -25,7 +25,7 @@ export const NOTE_SLOTS = [
   { x: -88, y: -520 },
   { x: 88, y: -610 },
 ] as const;
-export const NOTE_OPACITY = [1, 0.86, 0.72, 0.6, 0.5] as const;
+export const NOTE_OPACITY = [1, 0.92, 0.84, 0.76, 0.68] as const;
 /** Where the dotted chain to the notes starts (just above the wordmark). */
 export const NOTE_CHAIN_START = { x: CENTER, y: CENTER - 165 };
 

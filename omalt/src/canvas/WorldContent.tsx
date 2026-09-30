@@ -62,7 +62,8 @@ export const WorldContent = memo(function WorldContent({
   const tasks = useOmaltStore((s) => s.tasks);
   const moods = useOmaltStore((s) => s.moods);
   const entries = useOmaltStore((s) => s.entries);
-  const data: ModuleData = useMemo(() => ({ tasks, moods, entries }), [tasks, moods, entries]);
+  const items = useOmaltStore((s) => s.items);
+  const data: ModuleData = useMemo(() => ({ tasks, moods, entries, items }), [tasks, moods, entries, items]);
 
   // Which chunk holds the centre of the viewport. Only a change here triggers a re-render.
   const [chunkKey, setChunkKey] = useState(() => {

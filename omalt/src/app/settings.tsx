@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Alert, Switch, View, StyleSheet } from 'react-native';
 import { AppText } from '../components/AppText';
 import { Panel } from '../components/Panel';
@@ -5,6 +6,7 @@ import { PillButton } from '../components/PillButton';
 import { Screen } from '../components/Screen';
 import { useOmaltStore } from '../store/useOmaltStore';
 import { BUILD_ID } from '../lib/build';
+import { scheduleTestNudge } from '../nudges/notifications';
 import { colors, spacing } from '../theme';
 
 export default function Settings() {
@@ -14,6 +16,9 @@ export default function Settings() {
   const clockOffsetMs = useOmaltStore((s) => s.clockOffsetMs);
   const skipAhead = useOmaltStore((s) => s.skipAhead);
   const resetClock = useOmaltStore((s) => s.resetClock);
+  const nudgesEnabled = useOmaltStore((s) => s.nudgesEnabled);
+  const setNudgesEnabled = useOmaltStore((s) => s.setNudgesEnabled);
+  const showNudge = useOmaltStore((s) => s.showNudge);
   const daysAhead = Math.round(clockOffsetMs / (24 * 60 * 60 * 1000));
 
   const confirmReset = () =>
@@ -39,6 +44,57 @@ export default function Settings() {
             thumbColor={colors.ivory}
             accessibilityLabel="Plain list view"
           />
+        </View>
+      </Panel>
+
+      <Panel>
+        <View style={styles.switchRow}>
+          <View style={styles.switchText}>
+            <AppText variant="heading">Gentle nudges</AppText>
+            <AppText variant="small" tone="soft">
+              About one quick question a day, like "How's the weather?" or "Did you go to the gym?", at a
+              random time. Tap one to answer and it goes into your diary.
+            </AppText>
+          </View>
+          <Switch
+            value={nudgesEnabled}
+            onValueChange={async (on) => {
+              const ok = await setNudgesEnabled(on);
+              if (!ok) {
+                Alert.alert(
+                  'Notifications are off',
+                  'Allow notifications for this app in your phone settings to get nudges.',
+                );
+              }
+            }}
+            trackColor={{ false: colors.sand, true: colors.sage }}
+            thumbColor={colors.ivory}
+            accessibilityLabel="Gentle nudges"
+          />
+        </View>
+        <View style={styles.buttons}>
+          <PillButton
+            label="Show a check-in now"
+            kind="secondary"
+            onPress={() => {
+              showNudge(['weather', 'gym', 'sleep', 'steps', 'plan', 'grateful', 'energy', 'water'][Math.floor(Math.random() * 8)]);
+              router.back();
+            }}
+          />
+          {nudgesEnabled ? (
+            <PillButton
+              label="Send a test in 5s"
+              kind="ghost"
+              onPress={async () => {
+                try {
+                  await scheduleTestNudge(5);
+                  Alert.alert('Scheduled', 'Leave the app now. A nudge will arrive in a few seconds.');
+                } catch {
+                  Alert.alert('Could not schedule', 'Notifications may be unavailable here.');
+                }
+              }}
+            />
+          ) : null}
         </View>
       </Panel>
 

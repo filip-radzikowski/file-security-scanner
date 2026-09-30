@@ -8,6 +8,13 @@ import * as repo from '../db/repo';
 import type { Entry, ExtractedItemRow, ModuleRecord, Suggestion } from '../db/schema';
 import { makeId } from '../lib/ids';
 import { titleForType } from '../modules/meta';
+import { NOTIFY_NUDGE, nudgeById, pickNudge } from '../nudges/nudges';
+import { cancelNudges, ensurePermission, scheduleNudges } from '../nudges/notifications';
+import { praiseForEntry, praiseForTask } from '../nudges/praise';
+import { SLEEP_ITEM_TYPE, sleepPayloadSchema } from '../modules/sleep/schema';
+import { STEPS_ITEM_TYPE, stepsPayloadSchema } from '../modules/steps/schema';
+import { streakInfo } from '../modules/streak/schema';
+import { WEATHER_ITEM_TYPE, weatherPayloadSchema } from '../modules/weather/schema';
 import { computeProgress, computeStats } from '../unlocks/progress';
 import { UNLOCK_RULES } from '../unlocks/rules';
 import {
@@ -31,6 +38,15 @@ import { reconcileSuggestions } from './suggestions';
 const KV_LIST_VIEW = 'settings.listView';
 const KV_PAN_CENTER = 'canvas.panCenter';
 const KV_CLOCK_OFFSET = 'debug.clockOffsetMs';
+const KV_NUDGES_ENABLED = 'settings.nudges';
+const KV_NUDGE_LAST = 'nudge.last';
+const KV_NUDGE_RECENT = 'nudge.recent';
+const KV_NUDGE_ASKED = 'nudge.askedNotify';
+const KV_NUDGE_SCHEDULED = 'nudge.scheduledAt';
+const FOLLOWUP_ITEM_TYPE = 'followup';
+/** Minimum gap between in-app nudges. */
+const NUDGE_GAP_MS = 3 * 60 * 60 * 1000;
+const TOPIC_MODULE_TYPES = [WEATHER_ITEM_TYPE, SLEEP_ITEM_TYPE, STEPS_ITEM_TYPE];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const entryTextSchema = z.string().trim().min(1).max(4000);
@@ -45,6 +61,13 @@ export interface PanCenter {
 export interface AddEntryResult {
   taskCount: number;
   mood: number | null;
+  /** Omalt's short reaction to what was written. */
+  message: string;
+}
+
+export interface Cheer {
+  id: number;
+  message: string;
 }
 
 export interface UnlockNotice {
@@ -69,9 +92,26 @@ interface OmaltState {
   /** Testing only: shifts "now" forward so time-based unlocks can be previewed. */
   clockOffsetMs: number;
   unlockNotice: UnlockNotice | null;
+  /** A short, warm message from Omalt, shown briefly as a banner. */
+  cheer: Cheer | null;
+  /** The nudge (quick prompt) currently offered, if any. */
+  activeNudge: string | null;
+  nudgesEnabled: boolean;
 
   init(): Promise<void>;
-  addEntry(text: string): Promise<AddEntryResult | null>;
+  /** Saves a diary entry. Pass announce: false when the caller shows the returned message itself. */
+  addEntry(text: string, opts?: { announce?: boolean }): Promise<AddEntryResult | null>;
+  addFollowUp(entryId: string, text: string): Promise<void>;
+  showCheer(message: string): void;
+  clearCheer(): void;
+  maybeShowNudge(): Promise<void>;
+  showNudge(id: string): void;
+  dismissNudge(): void;
+  /** Writes the nudge's answer to the diary and closes the card. */
+  answerNudge(sentence: string): Promise<void>;
+  /** Returns false if notification permission was refused. */
+  setNudgesEnabled(on: boolean): Promise<boolean>;
+  refreshNudgeSchedule(force?: boolean): Promise<void>;
   acceptSuggestion(id: string): Promise<string | null>;
   dismissSuggestion(id: string): Promise<void>;
   toggleTask(id: string): Promise<void>;
@@ -108,7 +148,9 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         return false;
       }
     }).length;
-    const candidates = await aiService.suggestModules({ taskMentions, moodMentions });
+    const topicMentions: Record<string, number> = {};
+    for (const i of items) if (TOPIC_MODULE_TYPES.includes(i.type)) topicMentions[i.type] = (topicMentions[i.type] ?? 0) + 1;
+    const candidates = await aiService.suggestModules({ taskMentions, moodMentions, topicMentions });
     const writes = reconcileSuggestions(candidates, suggestions, modules);
     if (writes.length === 0) return;
     for (const w of writes) await repo.upsertSuggestion(w);
@@ -193,10 +235,13 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
     panCenter: DEFAULT_PAN,
     clockOffsetMs: 0,
     unlockNotice: null,
+    cheer: null,
+    activeNudge: null,
+    nudgesEnabled: false,
 
     async init() {
       try {
-        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw] = await Promise.all([
+        const [entries, items, modules, suggestions, listViewRaw, panRaw, offsetRaw, nudgesRaw] = await Promise.all([
           repo.listEntries(),
           repo.listExtractedItems(),
           repo.listModules(),
@@ -204,6 +249,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
           repo.getKv(KV_LIST_VIEW),
           repo.getKv(KV_PAN_CENTER),
           repo.getKv(KV_CLOCK_OFFSET),
+          repo.getKv(KV_NUDGES_ENABLED),
         ]);
 
         let listView = listViewRaw === '1';
@@ -236,6 +282,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
           listView,
           panCenter,
           clockOffsetMs: Number.isFinite(offset) ? offset : 0,
+          nudgesEnabled: nudgesRaw === '1',
           ready: true,
         });
         enqueueUnlockSync();
@@ -244,7 +291,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       }
     },
 
-    async addEntry(rawText) {
+    async addEntry(rawText, opts) {
       const parsed = entryTextSchema.safeParse(rawText);
       if (!parsed.success) return null;
       const text = parsed.data;
@@ -262,6 +309,30 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         type: TASK_ITEM_TYPE,
         payload: JSON.stringify(taskPayloadSchema.parse({ text: t.text, done: false, source: 'entry' })),
       }));
+      for (const t of analysis.topics) {
+        if (t.type === 'weather') {
+          newItems.push({
+            id: makeId('itm'),
+            entryId: entry.id,
+            type: WEATHER_ITEM_TYPE,
+            payload: JSON.stringify(weatherPayloadSchema.parse({ condition: t.label })),
+          });
+        } else if (t.type === 'sleep') {
+          newItems.push({
+            id: makeId('itm'),
+            entryId: entry.id,
+            type: SLEEP_ITEM_TYPE,
+            payload: JSON.stringify(sleepPayloadSchema.parse({ hours: t.value })),
+          });
+        } else if (t.type === 'steps') {
+          newItems.push({
+            id: makeId('itm'),
+            entryId: entry.id,
+            type: STEPS_ITEM_TYPE,
+            payload: JSON.stringify(stepsPayloadSchema.parse({ count: t.value })),
+          });
+        }
+      }
       if (analysis.mood) {
         newItems.push({
           id: makeId('itm'),
@@ -278,13 +349,114 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         for (const item of newItems) await repo.insertExtractedItem(item);
       });
 
-      const entries = [...get().entries, entry];
+      const before = get().entries;
+      const entries = [...before, entry];
       const items = [...get().items, ...newItems];
       set({ entries, items, ...derive(entries, items) });
       await refreshSuggestions();
       await enqueueUnlockSync();
 
-      return { taskCount: analysis.tasks.length, mood: entry.mood };
+      const firstToday = !before.some((e) => new Date(e.createdAt).toDateString() === new Date(entry.createdAt).toDateString());
+      const message = praiseForEntry({
+        entryCount: entries.length,
+        analysis,
+        streak: streakInfo(entries, entry.createdAt).current,
+        firstToday,
+        moodValue: entry.mood,
+      });
+      if (opts?.announce !== false) get().showCheer(message);
+
+      return { taskCount: analysis.tasks.length, mood: entry.mood, message };
+    },
+
+    async addFollowUp(entryId, rawText) {
+      const parsed = entryTextSchema.safeParse(rawText);
+      if (!parsed.success) return;
+      const item: ExtractedItemRow = {
+        id: makeId('itm'),
+        entryId,
+        type: FOLLOWUP_ITEM_TYPE,
+        payload: JSON.stringify({ text: parsed.data, at: nowMs() }),
+      };
+      await repo.insertExtractedItem(item);
+      set((s) => ({ items: [...s.items, item] }));
+      get().showCheer('Thanks for going deeper. That is how patterns show up.');
+    },
+
+    showCheer(message) {
+      set({ cheer: { id: Date.now(), message } });
+    },
+
+    clearCheer() {
+      set({ cheer: null });
+    },
+
+    async maybeShowNudge() {
+      const s = get();
+      if (!s.ready || s.activeNudge || s.entries.length < 1 || s.unlockNotice) return;
+      if (s.suggestions.some((x) => x.status === 'pending')) return;
+      const last = Number(await repo.getKv(KV_NUDGE_LAST));
+      if (Number.isFinite(last) && Date.now() - last < NUDGE_GAP_MS) return;
+
+      // Once, after a couple of entries, offer notifications.
+      const asked = (await repo.getKv(KV_NUDGE_ASKED)) === '1';
+      let id: string;
+      if (!s.nudgesEnabled && !asked && s.entries.length >= 2) {
+        id = NOTIFY_NUDGE.id;
+        await repo.setKv(KV_NUDGE_ASKED, '1');
+      } else {
+        let recent: string[] = [];
+        try {
+          const raw = await repo.getKv(KV_NUDGE_RECENT);
+          if (raw) recent = z.array(z.string()).catch([]).parse(JSON.parse(raw));
+        } catch {
+          recent = [];
+        }
+        id = pickNudge(recent.slice(-3)).id;
+        await repo.setKv(KV_NUDGE_RECENT, JSON.stringify([...recent, id].slice(-6)));
+      }
+      await repo.setKv(KV_NUDGE_LAST, String(Date.now()));
+      set({ activeNudge: id });
+    },
+
+    showNudge(id) {
+      if (nudgeById(id)) set({ activeNudge: id });
+    },
+
+    dismissNudge() {
+      set({ activeNudge: null });
+    },
+
+    async answerNudge(sentence) {
+      set({ activeNudge: null });
+      await get().addEntry(sentence);
+    },
+
+    async setNudgesEnabled(on) {
+      if (on) {
+        const ok = await ensurePermission().catch(() => false);
+        if (!ok) return false;
+        set({ nudgesEnabled: true });
+        await repo.setKv(KV_NUDGES_ENABLED, '1');
+        await get().refreshNudgeSchedule(true);
+        return true;
+      }
+      set({ nudgesEnabled: false });
+      await repo.setKv(KV_NUDGES_ENABLED, '0');
+      await cancelNudges().catch(() => {});
+      return true;
+    },
+
+    async refreshNudgeSchedule(force) {
+      if (!get().nudgesEnabled) return;
+      const at = Number(await repo.getKv(KV_NUDGE_SCHEDULED));
+      if (!force && Number.isFinite(at) && Date.now() - at < DAY_MS) return;
+      try {
+        await scheduleNudges();
+        await repo.setKv(KV_NUDGE_SCHEDULED, String(Date.now()));
+      } catch {
+        // Notifications are optional; never break the app over them.
+      }
     },
 
     async acceptSuggestion(id) {
@@ -309,6 +481,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       }
       await repo.setSuggestionStatus(id, 'accepted');
       const created = module;
+      get().showCheer(`${created.title} added. I'll keep track of it with you.`);
       set((s) => ({
         modules: s.modules.some((m) => m.id === created.id) ? s.modules : [...s.modules, created],
         suggestions: s.suggestions.map((x) => (x.id === id ? { ...x, status: 'accepted' as const } : x)),
@@ -332,6 +505,12 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
       await repo.updateExtractedItemPayload(id, next);
       const items = get().items.map((i) => (i.id === id ? { ...i, payload: next } : i));
       set({ items, ...derive(get().entries, items) });
+      if (done) {
+        const today = new Date(nowMs()).toDateString();
+        const tasks = get().tasks;
+        const doneToday = tasks.filter((t) => t.done && t.doneAt !== undefined && new Date(t.doneAt).toDateString() === today).length;
+        get().showCheer(praiseForTask(doneToday, tasks.filter((t) => !t.done).length));
+      }
     },
 
     async addTask(rawText) {
@@ -414,6 +593,7 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
 
     async resetAll() {
       await repo.eraseAll();
+      await cancelNudges().catch(() => {});
       set({
         entries: [],
         items: [],
@@ -425,6 +605,9 @@ export const useOmaltStore = create<OmaltState>((set, get) => {
         panCenter: DEFAULT_PAN,
         clockOffsetMs: 0,
         unlockNotice: null,
+        cheer: null,
+        activeNudge: null,
+        nudgesEnabled: false,
       });
     },
   };

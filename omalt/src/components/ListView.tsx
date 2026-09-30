@@ -11,6 +11,7 @@ import { useOmaltStore } from '../store/useOmaltStore';
 import { colors, hairlineWidth, hitTarget, radius, shadows, spacing } from '../theme';
 import { AppText } from './AppText';
 import { Composer } from './Composer';
+import { GrowthHint } from './GrowthHint';
 import { SuggestionPrompt } from './SuggestionPrompt';
 
 function ModuleRow({ module: m, data }: { module: ModuleRecord; data: ModuleData }) {
@@ -48,8 +49,9 @@ export function ListView() {
   const tasks = useOmaltStore((s) => s.tasks);
   const moods = useOmaltStore((s) => s.moods);
   const entries = useOmaltStore((s) => s.entries);
+  const items = useOmaltStore((s) => s.items);
   const recent = useMemo(() => entries.slice(-5).reverse(), [entries]);
-  const data = useMemo(() => ({ tasks, moods, entries }), [tasks, moods, entries]);
+  const data = useMemo(() => ({ tasks, moods, entries, items }), [tasks, moods, entries, items]);
 
   return (
     <ScrollView
@@ -81,6 +83,7 @@ export function ListView() {
 
       <Composer height={150} />
       <SuggestionPrompt />
+      <GrowthHint bare />
 
       <AppText variant="label" tone="soft" style={styles.sectionLabel}>
         YOUR MODULES
@@ -96,15 +99,24 @@ export function ListView() {
       {recent.length > 0 ? (
         <>
           <AppText variant="label" tone="soft" style={styles.sectionLabel}>
-            RECENT THOUGHTS
+            RECENT THOUGHTS (TAP ONE TO OPEN)
           </AppText>
           {recent.map((e) => (
-            <View key={e.id} style={styles.thought} accessible accessibilityLabel={`Your entry: ${e.text}`}>
-              <AppText variant="body">{e.text}</AppText>
-              <AppText variant="small" tone="soft">
-                {format(e.createdAt, 'd MMM \u00B7 HH:mm')}
+            <Pressable
+              key={e.id}
+              onPress={() => router.push({ pathname: '/thought/[id]', params: { id: e.id } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Your entry: ${e.text}`}
+              accessibilityHint="Opens this thought"
+              style={({ pressed }) => [styles.thought, pressed && styles.pillPressed]}
+            >
+              <AppText variant="body" numberOfLines={3}>
+                {e.text}
               </AppText>
-            </View>
+              <AppText variant="small" tone="soft">
+                {format(e.createdAt, 'd MMM \u00B7 HH:mm')} {'\u00B7'} tap to open
+              </AppText>
+            </Pressable>
           ))}
         </>
       ) : null}
