@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Python ignores lib/, but the app has source in src/lib
+!src/lib/
